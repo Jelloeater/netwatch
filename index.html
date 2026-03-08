@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NetWatch — See Everything. Control the Signal.</title>
+<meta name="description" content="Real-time network diagnostics in your terminal. Like htop for your network. Built in Rust for speed. Open source, MIT licensed.">
+<meta name="author" content="Matt Hartley">
+<meta property="og:title" content="NetWatch — See Everything. Control the Signal.">
+<meta property="og:description" content="Real-time network diagnostics in your terminal. Packet capture, stream reassembly, topology mapping, AI insights. Built in Rust.">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>👁</text></svg>">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap');
+:root {
+  --green:#00ff41; --green-dim:#00cc33; --green-glow:rgba(0,255,65,0.15);
+  --green-glow-s:rgba(0,255,65,0.4); --cyan:#00d4ff; --red:#ff0033;
+  --yellow:#ffcc00; --bg:#0a0a0a; --bg-card:#0f0f0f; --border:#1a1a1a;
+  --border-glow:#003300; --text:#c0c0c0; --text-dim:#666; --text-bright:#fff;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth;scrollbar-width:thin;scrollbar-color:var(--green-dim) var(--bg)}
+body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif;line-height:1.6;overflow-x:hidden}
+body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.03) 2px,rgba(0,0,0,0.03) 4px);pointer-events:none;z-index:9999}
+body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse at center,transparent 60%,rgba(0,0,0,0.4) 100%);pointer-events:none;z-index:9998}
+code,.mono{font-family:'Fira Code','JetBrains Mono',monospace}
+a{color:var(--green);text-decoration:none;transition:all .2s}
+a:hover{color:var(--text-bright);text-shadow:0 0 10px var(--green-glow-s)}
+.container{max-width:1200px;margin:0 auto;padding:0 24px}
+
+/* ── NAV ── */
+nav{position:fixed;top:0;left:0;right:0;z-index:1000;background:rgba(10,10,10,0.92);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);padding:0 24px}
+.nav-inner{max-width:1200px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;height:60px}
+.logo{font-family:'Fira Code',monospace;font-weight:700;font-size:1.2rem;color:var(--green);letter-spacing:2px;text-transform:uppercase}
+.logo .blink{animation:blink 1s step-end infinite}
+nav ul{display:flex;list-style:none;gap:28px}
+nav ul li a{font-family:'Fira Code',monospace;font-size:.75rem;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase}
+nav ul li a:hover{color:var(--green);text-shadow:0 0 8px var(--green-glow)}
+.nav-cta{font-family:'Fira Code',monospace;font-size:.78rem;padding:8px 20px;background:0;border:1px solid var(--green-dim);color:var(--green);letter-spacing:1px;cursor:pointer;transition:all .3s;text-decoration:none}
+.nav-cta:hover{background:var(--green);color:var(--bg);box-shadow:0 0 20px var(--green-glow-s)}
+
+/* ── HERO ── */
+.hero{min-height:100vh;display:flex;align-items:center;justify-content:center;position:relative;padding:120px 24px 80px}
+.hero-grid{position:absolute;inset:0;background-image:linear-gradient(var(--border) 1px,transparent 1px),linear-gradient(90deg,var(--border) 1px,transparent 1px);background-size:60px 60px;opacity:.3;mask-image:radial-gradient(ellipse at 50% 50%,black 30%,transparent 70%);-webkit-mask-image:radial-gradient(ellipse at 50% 50%,black 30%,transparent 70%)}
+.hero-content{text-align:center;position:relative;z-index:1;max-width:900px}
+.hero-eyebrow{font-family:'Fira Code',monospace;font-size:.85rem;color:var(--green-dim);letter-spacing:4px;text-transform:uppercase;margin-bottom:24px;opacity:0;animation:fadeUp .8s .2s forwards}
+.hero h1{font-family:'Fira Code',monospace;font-size:clamp(2.5rem,6vw,4.5rem);font-weight:700;color:var(--text-bright);line-height:1.1;margin-bottom:8px;opacity:0;animation:fadeUp .8s .4s forwards}
+.hero h1 .hl{color:var(--green);text-shadow:0 0 30px var(--green-glow-s),0 0 60px var(--green-glow)}
+.hero-tag{font-size:1.25rem;color:var(--text);margin:24px auto;max-width:640px;opacity:0;animation:fadeUp .8s .6s forwards}
+.hero-tag em{color:var(--cyan);font-style:normal}
+
+.hero-terminal{font-family:'Fira Code',monospace;font-size:.85rem;color:var(--green);margin:40px auto;padding:20px 28px;background:rgba(0,20,0,.3);border:1px solid var(--border-glow);border-radius:6px;display:inline-block;opacity:0;animation:fadeUp .8s .8s forwards;text-align:left;max-width:520px;width:100%}
+.hero-terminal .p{color:var(--text-dim)}
+.hero-terminal .c{color:var(--green)}
+.hero-terminal .dim{color:var(--text-dim);font-size:.75rem}
+
+.hero-actions{display:flex;gap:16px;justify-content:center;flex-wrap:wrap;margin-top:40px;opacity:0;animation:fadeUp .8s 1s forwards}
+.btn-p{font-family:'Fira Code',monospace;font-size:.88rem;padding:14px 36px;background:var(--green);color:var(--bg);border:none;letter-spacing:1px;font-weight:600;cursor:pointer;transition:all .3s;text-decoration:none;display:inline-block}
+.btn-p:hover{background:var(--text-bright);color:var(--bg);box-shadow:0 0 30px var(--green-glow-s);transform:translateY(-2px)}
+.btn-s{font-family:'Fira Code',monospace;font-size:.88rem;padding:14px 36px;background:0;border:1px solid var(--border);color:var(--text);letter-spacing:1px;cursor:pointer;transition:all .3s;text-decoration:none;display:inline-block}
+.btn-s:hover{border-color:var(--green-dim);color:var(--green);transform:translateY(-2px)}
+
+.hero-stats{display:flex;gap:48px;justify-content:center;margin-top:56px;opacity:0;animation:fadeUp .8s 1.2s forwards}
+.hero-stat{text-align:center}
+.hero-stat .val{font-family:'Fira Code',monospace;font-size:1.8rem;font-weight:700;color:var(--green)}
+.hero-stat .lbl{font-size:.75rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:2px;margin-top:4px}
+
+/* ── SECTION COMMON ── */
+section{padding:100px 24px;position:relative}
+.section-label{font-family:'Fira Code',monospace;font-size:.75rem;color:var(--green-dim);letter-spacing:4px;text-transform:uppercase;margin-bottom:12px}
+.section-title{font-family:'Fira Code',monospace;font-size:clamp(1.8rem,4vw,2.8rem);font-weight:700;color:var(--text-bright);margin-bottom:16px}
+.section-sub{font-size:1.1rem;color:var(--text);max-width:600px;margin-bottom:48px}
+
+/* ── DEMO ── */
+.demo{background:var(--bg);border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+.demo-window{max-width:960px;margin:0 auto;border:1px solid var(--border);border-radius:8px;overflow:hidden;background:#000;box-shadow:0 0 60px rgba(0,255,65,.05)}
+.demo-titlebar{display:flex;align-items:center;gap:8px;padding:10px 16px;background:#111;border-bottom:1px solid var(--border)}
+.demo-dot{width:12px;height:12px;border-radius:50%}
+.demo-dot.r{background:#ff5f57}.demo-dot.y{background:#febc2e}.demo-dot.g{background:#28c840}
+.demo-titlebar span{font-family:'Fira Code',monospace;font-size:.75rem;color:var(--text-dim);margin-left:8px}
+.demo-body{padding:0;position:relative}
+.demo-body img{width:100%;display:block}
+.demo-body pre{padding:16px 20px;font-family:'Fira Code',monospace;font-size:.7rem;line-height:1.5;color:var(--green);overflow-x:auto;white-space:pre;margin:0}
+
+/* ── FEATURES GRID ── */
+.features{background:var(--bg)}
+.features-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:24px}
+.feature-card{background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:32px;transition:all .3s;position:relative;overflow:hidden}
+.feature-card:hover{border-color:var(--border-glow);transform:translateY(-4px);box-shadow:0 8px 40px rgba(0,255,65,.06)}
+.feature-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--green-dim),transparent);opacity:0;transition:opacity .3s}
+.feature-card:hover::before{opacity:1}
+.feature-icon{font-size:1.6rem;margin-bottom:16px;display:block}
+.feature-card h3{font-family:'Fira Code',monospace;font-size:1rem;color:var(--text-bright);margin-bottom:8px}
+.feature-card p{font-size:.9rem;color:var(--text-dim);line-height:1.6}
+.feature-card .tag{font-family:'Fira Code',monospace;font-size:.65rem;padding:3px 8px;border:1px solid var(--border);color:var(--green-dim);border-radius:3px;display:inline-block;margin-top:12px}
+
+/* ── TABS SHOWCASE ── */
+.tabs-section{background:#050505;border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+.tabs-bar{display:flex;gap:0;border:1px solid var(--border);border-radius:6px;overflow:hidden;margin-bottom:40px;max-width:800px}
+.tab-btn{font-family:'Fira Code',monospace;font-size:.72rem;padding:12px 16px;background:var(--bg-card);color:var(--text-dim);border:none;cursor:pointer;flex:1;transition:all .2s;letter-spacing:.5px;border-right:1px solid var(--border)}
+.tab-btn:last-child{border-right:none}
+.tab-btn:hover{color:var(--green);background:rgba(0,255,65,.03)}
+.tab-btn.active{color:var(--green);background:rgba(0,255,65,.08);box-shadow:inset 0 -2px 0 var(--green)}
+.tab-content{display:none;animation:fadeIn .4s}
+.tab-content.active{display:block}
+.tab-panel{display:grid;grid-template-columns:1fr 1fr;gap:40px;align-items:center}
+.tab-panel-text h3{font-family:'Fira Code',monospace;font-size:1.3rem;color:var(--text-bright);margin-bottom:12px}
+.tab-panel-text p{color:var(--text);font-size:.95rem;margin-bottom:16px}
+.tab-panel-text ul{list-style:none;padding:0}
+.tab-panel-text ul li{font-size:.88rem;color:var(--text-dim);padding:6px 0;position:relative;padding-left:20px}
+.tab-panel-text ul li::before{content:'›';position:absolute;left:0;color:var(--green)}
+.tab-terminal{font-family:'Fira Code',monospace;font-size:.65rem;line-height:1.45;color:var(--green);background:#000;border:1px solid var(--border);border-radius:6px;padding:16px;white-space:pre;overflow-x:auto}
+
+/* ── PROTOCOL DECODE ── */
+.proto-section{background:var(--bg)}
+.proto-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}
+.proto-chip{font-family:'Fira Code',monospace;font-size:.78rem;padding:14px 16px;background:var(--bg-card);border:1px solid var(--border);border-radius:6px;text-align:center;transition:all .3s;cursor:default}
+.proto-chip:hover{border-color:var(--green-dim);box-shadow:0 0 15px rgba(0,255,65,.08)}
+.proto-chip .name{color:var(--text-bright);display:block;margin-bottom:4px}
+.proto-chip .desc{color:var(--text-dim);font-size:.65rem}
+
+/* ── ARCHITECTURE ── */
+.arch-section{background:#050505;border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+.arch-diagram{font-family:'Fira Code',monospace;font-size:.7rem;line-height:1.5;color:var(--green);background:#000;border:1px solid var(--border);border-radius:8px;padding:24px;max-width:700px;margin:0 auto;white-space:pre;overflow-x:auto}
+
+/* ── INSTALL ── */
+.install-section{background:var(--bg)}
+.install-options{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:24px;max-width:800px}
+.install-card{background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:28px;transition:all .3s}
+.install-card:hover{border-color:var(--border-glow)}
+.install-card h3{font-family:'Fira Code',monospace;font-size:.95rem;color:var(--text-bright);margin-bottom:16px}
+.install-cmd{font-family:'Fira Code',monospace;font-size:.82rem;background:#000;border:1px solid var(--border);border-radius:4px;padding:14px 18px;color:var(--green);position:relative;cursor:pointer}
+.install-cmd .prompt-char{color:var(--text-dim)}
+.install-cmd:hover{border-color:var(--green-dim)}
+.install-note{font-size:.78rem;color:var(--text-dim);margin-top:12px}
+
+/* ── PLATFORMS ── */
+.platforms{display:flex;gap:40px;justify-content:center;flex-wrap:wrap;margin-top:48px}
+.platform{text-align:center;padding:20px 32px;border:1px solid var(--border);border-radius:8px;background:var(--bg-card);min-width:140px}
+.platform .os-icon{font-size:2rem;margin-bottom:8px}
+.platform .os-name{font-family:'Fira Code',monospace;font-size:.8rem;color:var(--text-bright)}
+.platform .os-note{font-size:.7rem;color:var(--text-dim);margin-top:4px}
+
+/* ── CTA ── */
+.cta-section{padding:120px 24px;text-align:center;position:relative}
+.cta-section::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at center,rgba(0,255,65,.04),transparent 70%)}
+.cta-section h2{font-family:'Fira Code',monospace;font-size:clamp(2rem,5vw,3.5rem);font-weight:700;color:var(--text-bright);margin-bottom:16px;position:relative}
+.cta-section p{font-size:1.1rem;color:var(--text);max-width:500px;margin:0 auto 40px;position:relative}
+
+/* ── FOOTER ── */
+footer{border-top:1px solid var(--border);padding:40px 24px;text-align:center}
+footer .footer-inner{max-width:1200px;margin:0 auto;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px}
+footer .copy{font-size:.8rem;color:var(--text-dim)}
+footer .links{display:flex;gap:24px}
+footer .links a{font-family:'Fira Code',monospace;font-size:.75rem;color:var(--text-dim);letter-spacing:1px}
+footer .links a:hover{color:var(--green)}
+
+/* ── ANIMATIONS ── */
+@keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes blink{50%{opacity:0}}
+@keyframes glitch{0%,100%{transform:translate(0)}20%{transform:translate(-2px,2px)}40%{transform:translate(2px,-1px)}60%{transform:translate(-1px,-2px)}80%{transform:translate(1px,1px)}}
+@keyframes typewriter{from{width:0}to{width:100%}}
+
+/* ── RESPONSIVE ── */
+@media(max-width:768px){
+  nav ul{display:none}
+  .hero h1{font-size:2.2rem}
+  .hero-terminal{min-width:0;font-size:.75rem}
+  .hero-stats{flex-direction:column;gap:24px}
+  .tab-panel{grid-template-columns:1fr}
+  .tabs-bar{flex-wrap:wrap}
+  .tab-btn{font-size:.65rem;padding:10px 8px}
+  .footer-inner{flex-direction:column;text-align:center}
+}
+</style>
+</head>
+<body>
+
+<!-- ════════════════════ NAV ════════════════════ -->
+<nav>
+  <div class="nav-inner">
+    <div class="logo">net<span style="color:var(--text-bright)">watch</span><span class="blink">_</span></div>
+    <ul>
+      <li><a href="#features">Features</a></li>
+      <li><a href="#demo">Demo</a></li>
+      <li><a href="#tabs">Tabs</a></li>
+      <li><a href="#install">Install</a></li>
+    </ul>
+    <a href="https://github.com/matthart1983/netwatch" class="nav-cta" target="_blank" rel="noopener">GitHub →</a>
+  </div>
+</nav>
+
+<!-- ════════════════════ HERO ════════════════════ -->
+<section class="hero" id="top">
+  <div class="hero-grid"></div>
+  <div class="hero-content">
+    <p class="hero-eyebrow">Real-time network diagnostics</p>
+    <h1>See <span class="hl">Everything</span>.<br>Control the Signal.</h1>
+    <p class="hero-tag">
+      Your network is talking. <em>NetWatch</em> lets you listen.<br>
+      Like htop for your network — built in Rust for zero compromise.
+    </p>
+    <div class="hero-terminal">
+      <div><span class="p">$</span> <span class="c">cargo install netwatch-tui</span></div>
+      <div><span class="p">$</span> <span class="c">sudo netwatch</span></div>
+      <div class="dim"># 8 tabs. 10+ protocols. Zero config. Full control.</div>
+    </div>
+    <div class="hero-actions">
+      <a href="#install" class="btn-p">Get Started</a>
+      <a href="https://github.com/matthart1983/netwatch" class="btn-s" target="_blank" rel="noopener">View Source</a>
+    </div>
+    <div class="hero-stats">
+      <div class="hero-stat"><div class="val">9,300+</div><div class="lbl">Lines of Rust</div></div>
+      <div class="hero-stat"><div class="val">10+</div><div class="lbl">Decoded Protocols</div></div>
+      <div class="hero-stat"><div class="val">8</div><div class="lbl">Diagnostic Tabs</div></div>
+      <div class="hero-stat"><div class="val">127+</div><div class="lbl">Unit Tests</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════ DEMO ════════════════════ -->
+<section class="demo" id="demo">
+  <div class="container">
+    <p class="section-label">// live_demo</p>
+    <h2 class="section-title">Watch the Network Breathe</h2>
+    <p class="section-sub">Dashboard with live interface stats, bandwidth graphs, top connections, health probes, and latency heatmap.</p>
+    <div class="demo-window">
+      <div class="demo-titlebar">
+        <div class="demo-dot r"></div>
+        <div class="demo-dot y"></div>
+        <div class="demo-dot g"></div>
+        <span>netwatch — sudo — 192×48</span>
+      </div>
+      <div class="demo-body">
+<pre>
+<span style="color:var(--text-bright)">┌─ NetWatch ──────────────────────────────────────────── 15:04:32 ─┐</span>
+<span style="color:var(--text-bright)">│</span> <span style="color:var(--green)">[1] Dash</span> [2] Conn [3] Iface [4] Pkt [5] Stats               <span style="color:var(--text-bright)">│</span>
+<span style="color:var(--text-bright)">│</span> [6] Topo [7] Time [8] Insights                          [?]  <span style="color:var(--text-bright)">│</span>
+<span style="color:var(--text-bright)">├─────────────────────────────────────────────────────────────────┤</span>
+<span style="color:var(--text-bright)">│</span> INTERFACES            RX rate       TX rate       Status      <span style="color:var(--text-bright)">│</span>
+<span style="color:var(--text-bright)">│</span> ─────────────────────────────────────────────────────────      <span style="color:var(--text-bright)">│</span>
+<span style="color:var(--text-bright)">│</span> en0  192.168.1.42     <span style="color:var(--green)">▆▆▆ 12.4 MB/s</span>  <span style="color:var(--cyan)">▃▃ 1.2 MB/s</span>  <span style="color:var(--green)">UP</span>       <span style="color:var(--text-bright)">│</span>
+<span style="color:var(--text-bright)">│</span> lo0  127.0.0.1        <span style="color:var(--text-dim)">▁▁▁  0.1 KB/s</span>  <span style="color:var(--text-dim)">▁▁ 0.1 KB/s</span>  <span style="color:var(--green)">UP</span>       <span style="color:var(--text-bright)">│</span>
+<span style="color:var(--text-bright)">│</span> utun3 10.8.0.2        <span style="color:var(--yellow)">▂▂▂  0.8 MB/s</span>  <span style="color:var(--yellow)">▂▂ 0.3 MB/s</span>  <span style="color:var(--green)">UP</span>       <span style="color:var(--text-bright)">│</span>
+<span style="color:var(--text-bright)">├─────────────────────────────────────────────────────────────────┤</span>
+<span style="color:var(--text-bright)">│</span> BANDWIDTH (en0)                       last 60s                <span style="color:var(--text-bright)">│</span>
+<span style="color:var(--text-bright)">│</span> RX <span style="color:var(--green)">▁▂▃▅▆█▇▅▃▂▁▂▃▅▇█▇▅▃▂▁▁▂▃▅▆█▇▅▃▂▁▂▃▅▇█▇▅▃▂▁</span>                <span style="color:var(--text-bright)">│</span>
+<span style="color:var(--text-bright)">│</span> TX <span style="color:var(--cyan)">▁▁▂▂▃▃▂▂▁▁▁▂▂▃▃▂▂▁▁▁▁▁▂▂▃▃▂▂▁▁▁▂▂▃▃▂▂▁▁▁</span>                <span style="color:var(--text-bright)">│</span>
+<span style="color:var(--text-bright)">├─────────────────────────────────────────────────────────────────┤</span>
+<span style="color:var(--text-bright)">│</span> TOP CONNECTIONS         Proto  Local        Remote              <span style="color:var(--text-bright)">│</span>
+<span style="color:var(--text-bright)">│</span>  1  curl          TCP   :443   52.12.0.8    <span style="color:var(--green)">12 KB/s</span>            <span style="color:var(--text-bright)">│</span>
+<span style="color:var(--text-bright)">│</span>  2  firefox       TCP   :443   142.250.1.1   <span style="color:var(--green)">8 KB/s</span>            <span style="color:var(--text-bright)">│</span>
+<span style="color:var(--text-bright)">│</span>  3  ssh           TCP   :22    10.0.0.5      <span style="color:var(--cyan)">2 KB/s</span>            <span style="color:var(--text-bright)">│</span>
+<span style="color:var(--text-bright)">├─────────────────────────────────────────────────────────────────┤</span>
+<span style="color:var(--text-bright)">│</span> HEALTH                                                         <span style="color:var(--text-bright)">│</span>
+<span style="color:var(--text-bright)">│</span>  Gateway 192.168.1.1   RTT <span style="color:var(--green)">1.2ms</span>   Loss <span style="color:var(--green)">0.0%</span>                   <span style="color:var(--text-bright)">│</span>
+<span style="color:var(--text-bright)">│</span>  DNS 8.8.8.8           RTT <span style="color:var(--green)">12ms</span>    Loss <span style="color:var(--green)">0.0%</span>                   <span style="color:var(--text-bright)">│</span>
+<span style="color:var(--text-bright)">│</span>  Errors: RX 0  TX 0   Drops: 0   Collisions: 0                <span style="color:var(--text-bright)">│</span>
+<span style="color:var(--text-bright)">├─────────────────────────────────────────────────────────────────┤</span>
+<span style="color:var(--text-bright)">│</span> <span style="color:var(--text-dim)">q:Quit  /:Filter  s:Sort  p:Pause  Tab:Next Panel</span>              <span style="color:var(--text-bright)">│</span>
+<span style="color:var(--text-bright)">└─────────────────────────────────────────────────────────────────┘</span>
+</pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════ FEATURES ════════════════════ -->
+<section class="features" id="features">
+  <div class="container">
+    <p class="section-label">// feature_set</p>
+    <h2 class="section-title">Every Packet. Every Socket. Every Signal.</h2>
+    <p class="section-sub">From passive monitoring to deep packet inspection — all in a single lightweight binary.</p>
+    <div class="features-grid">
+
+      <div class="feature-card">
+        <span class="feature-icon">📡</span>
+        <h3>Live Interface Monitoring</h3>
+        <p>RX/TX rates, totals, and 60-second sparkline history for every network interface. Aggregate bandwidth graphs across all active interfaces.</p>
+        <span class="tag">1s polling</span>
+      </div>
+
+      <div class="feature-card">
+        <span class="feature-icon">🔌</span>
+        <h3>Active Connections</h3>
+        <p>Every open socket with process name, PID, protocol, state, and addresses. Sortable columns with GeoIP location and WHOIS lookups.</p>
+        <span class="tag">PID attribution</span>
+      </div>
+
+      <div class="feature-card">
+        <span class="feature-icon">🔬</span>
+        <h3>Deep Packet Inspection</h3>
+        <p>Wireshark-style live capture with protocol decoding for DNS, TLS, HTTP, ICMP, ARP, DHCP, NTP, mDNS, and more. Hex/ASCII dump included.</p>
+        <span class="tag">10+ protocols</span>
+      </div>
+
+      <div class="feature-card">
+        <span class="feature-icon">🔗</span>
+        <h3>TCP Stream Reassembly</h3>
+        <p>Follow TCP/UDP conversations with bidirectional text and hex views. Direction filtering, automatic SYN→SYN-ACK→ACK handshake timing.</p>
+        <span class="tag">stream tracking</span>
+      </div>
+
+      <div class="feature-card">
+        <span class="feature-icon">🔍</span>
+        <h3>Display Filters</h3>
+        <p>Wireshark-style filter bar with protocol, IP, port, stream index, text search, and full AND/OR/NOT combinators. Applied live as you type.</p>
+        <span class="tag">live filtering</span>
+      </div>
+
+      <div class="feature-card">
+        <span class="feature-icon">⚕️</span>
+        <h3>Expert Info &amp; Coloring</h3>
+        <p>Automatic severity classification — Error, Warning, Note, Chat. Color-coded rows for RSTs, NXDOMAIN, FIN, zero window, ICMP unreachable.</p>
+        <span class="tag">auto-classify</span>
+      </div>
+
+      <div class="feature-card">
+        <span class="feature-icon">🗺️</span>
+        <h3>Network Topology</h3>
+        <p>ASCII box diagram showing your machine, gateway, DNS servers, and top remote hosts with connection counts. Health indicators and traceroute built in.</p>
+        <span class="tag">visual map</span>
+      </div>
+
+      <div class="feature-card">
+        <span class="feature-icon">📊</span>
+        <h3>Connection Timeline</h3>
+        <p>Gantt-style horizontal bar chart of connection lifetimes. Color-coded by state. Adjustable time windows from 30 seconds to 1 hour.</p>
+        <span class="tag">temporal view</span>
+      </div>
+
+      <div class="feature-card">
+        <span class="feature-icon">🤖</span>
+        <h3>AI Network Insights</h3>
+        <p>Real-time AI analysis via local Ollama. Auto-analyzes every 15 seconds. Detects security concerns, performance issues, and anomalies.</p>
+        <span class="tag">ollama-powered</span>
+      </div>
+
+      <div class="feature-card">
+        <span class="feature-icon">💾</span>
+        <h3>PCAP Export</h3>
+        <p>Save captured packets to standard .pcap files readable by Wireshark, tshark, and tcpdump. Export full capture or filtered subsets.</p>
+        <span class="tag">interoperable</span>
+      </div>
+
+      <div class="feature-card">
+        <span class="feature-icon">🌐</span>
+        <h3>GeoIP &amp; WHOIS</h3>
+        <p>Background IP geolocation with country, city, and org display. On-demand RDAP WHOIS for any IP. Private IPs automatically skipped.</p>
+        <span class="tag">network intel</span>
+      </div>
+
+      <div class="feature-card">
+        <span class="feature-icon">🏥</span>
+        <h3>Health Probes</h3>
+        <p>ICMP ping probes to gateway and DNS with RTT and packet loss. Color-coded latency heatmap with 60-sample history on the Dashboard.</p>
+        <span class="tag">5s probing</span>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════ TABS SHOWCASE ════════════════════ -->
+<section class="tabs-section" id="tabs">
+  <div class="container">
+    <p class="section-label">// tab_system</p>
+    <h2 class="section-title">Eight Views. One Keystroke Away.</h2>
+    <p class="section-sub">Press 1–8 to switch between diagnostic views. Everything keyboard-driven.</p>
+
+    <div class="tabs-bar">
+      <button class="tab-btn active" onclick="switchTab(0)">1 Dashboard</button>
+      <button class="tab-btn" onclick="switchTab(1)">2 Connections</button>
+      <button class="tab-btn" onclick="switchTab(2)">3 Packets</button>
+      <button class="tab-btn" onclick="switchTab(3)">4 Topology</button>
+      <button class="tab-btn" onclick="switchTab(4)">5 Timeline</button>
+      <button class="tab-btn" onclick="switchTab(5)">6 Insights</button>
+    </div>
+
+    <div class="tab-content active" id="tab-0">
+      <div class="tab-panel">
+        <div class="tab-panel-text">
+          <h3>Dashboard</h3>
+          <p>Everything at a glance. The default view combines all critical network telemetry into a single pane of glass.</p>
+          <ul>
+            <li>All interfaces with live RX/TX rates and status</li>
+            <li>Full-width aggregate bandwidth sparklines (60s history)</li>
+            <li>Top 5 most active connections</li>
+            <li>Gateway and DNS health with latency heatmap</li>
+            <li>Error, drop, and collision counters</li>
+          </ul>
+        </div>
+        <div class="tab-terminal">en0  192.168.1.42  <span style="color:var(--green)">▆▆▆ 12.4 MB/s</span>  <span style="color:var(--cyan)">▃▃ 1.2 MB/s</span>  <span style="color:var(--green)">UP</span>
+lo0  127.0.0.1   <span style="color:var(--text-dim)">▁▁▁  0.1 KB/s</span>  <span style="color:var(--text-dim)">▁▁ 0.1 KB/s</span>  <span style="color:var(--green)">UP</span>
+
+BANDWIDTH (en0)                last 60s
+RX <span style="color:var(--green)">▁▂▃▅▆█▇▅▃▂▁▂▃▅▇█▇▅▃▂▁▁▂▃▅▆█▇▅▃▂</span>
+TX <span style="color:var(--cyan)">▁▁▂▂▃▃▂▂▁▁▁▂▂▃▃▂▂▁▁▁▁▁▂▂▃▃▂▂▁▁</span>
+
+HEALTH
+ Gateway 192.168.1.1  RTT <span style="color:var(--green)">1.2ms</span>  Loss <span style="color:var(--green)">0.0%</span>
+ DNS 8.8.8.8          RTT <span style="color:var(--green)">12ms</span>   Loss <span style="color:var(--green)">0.0%</span>
+ <span style="color:var(--green)">▁▂▁▁▂▁▁▁▂▁▂▁▁▁▁▂▁▁▁▂▁▂▃▂▁▁▁▂▁▁</span>  ← heatmap</div>
+      </div>
+    </div>
+
+    <div class="tab-content" id="tab-1">
+      <div class="tab-panel">
+        <div class="tab-panel-text">
+          <h3>Connections</h3>
+          <p>Full scrollable table of every active network socket — with process attribution down to the PID.</p>
+          <ul>
+            <li>Process name, PID, protocol, state, addresses</li>
+            <li>Sortable columns (s to cycle)</li>
+            <li>Jump to filtered packets with Enter</li>
+            <li>GeoIP location column (g to toggle)</li>
+            <li>On-demand WHOIS and traceroute</li>
+          </ul>
+        </div>
+        <div class="tab-terminal">Process    PID   Proto  State         Local            Remote
+─────────────────────────────────────────────────────────────
+firefox    1234  TCP    <span style="color:var(--green)">ESTABLISHED</span>   192.168.1.42:54321  142.250.1.1:443
+ssh        5678  TCP    <span style="color:var(--green)">ESTABLISHED</span>   192.168.1.42:22     10.0.0.5:49231
+curl       9012  TCP    <span style="color:var(--green)">ESTABLISHED</span>   192.168.1.42:54999  52.12.0.8:443
+node       3456  TCP    <span style="color:var(--yellow)">LISTEN</span>        0.0.0.0:3000        *:*
+postgres   7890  TCP    <span style="color:var(--yellow)">LISTEN</span>        127.0.0.1:5432      *:*
+
+s:Sort  Enter:→Packets  T:Traceroute  W:Whois  g:Geo</div>
+      </div>
+    </div>
+
+    <div class="tab-content" id="tab-2">
+      <div class="tab-panel">
+        <div class="tab-panel-text">
+          <h3>Packets</h3>
+          <p>Live packet capture with Wireshark-level protocol inspection. Deep decoding, stream reassembly, and expert classification.</p>
+          <ul>
+            <li>Layer-by-layer protocol decode (Eth → IP → TCP → App)</li>
+            <li>DNS, TLS (with SNI), HTTP, ICMP, ARP, DHCP, NTP</li>
+            <li>TCP stream follow with direction arrows</li>
+            <li>Display filters with AND/OR/NOT combinators</li>
+            <li>Bookmarks, PCAP export, BPF capture filters</li>
+          </ul>
+        </div>
+        <div class="tab-terminal"><span style="color:var(--text-dim)">#</span>    Time      Source           Dest            Proto  Info
+<span style="color:var(--green)">●</span> 1  15:04:32  192.168.1.42     142.250.1.1     TLS    Client Hello → sni:google.com
+<span style="color:var(--green)">●</span> 2  15:04:32  142.250.1.1      192.168.1.42    TLS    Server Hello v1.3
+<span style="color:var(--text-dim)">·</span> 3  15:04:33  192.168.1.42     8.8.8.8         DNS    Query A api.example.com
+<span style="color:var(--green)">●</span> 4  15:04:33  8.8.8.8          192.168.1.42    DNS    Response A 52.12.0.8
+<span style="color:var(--red)">▲</span> 5  15:04:34  192.168.1.42     10.0.0.99       TCP    RST, ACK
+<span style="color:var(--text-dim)">·</span> 6  15:04:34  192.168.1.42     52.12.0.8       HTTP   GET /api/users
+
+/ tcp and port 443<span class="blink" style="color:var(--green)">█</span></div>
+      </div>
+    </div>
+
+    <div class="tab-content" id="tab-3">
+      <div class="tab-panel">
+        <div class="tab-panel-text">
+          <h3>Topology</h3>
+          <p>ASCII network map showing your machine at the center, connected to infrastructure and remote hosts.</p>
+          <ul>
+            <li>Local machine with hostname and active interfaces</li>
+            <li>Gateway and DNS with health indicators (●)</li>
+            <li>Top remote hosts by connection count</li>
+            <li>Hop-by-hop traceroute with T key</li>
+            <li>Jump to connections with Enter</li>
+          </ul>
+        </div>
+        <div class="tab-terminal">┌──────────┐         ┌──────────────┐     ┌────────────┐
+│ DNS      │─── 0× ──│              │─ 3× │ 52.12.0.8  │
+│ 8.8.8.8  │         │   myhost     │     │ curl (TCP) │
+│ <span style="color:var(--green)">●</span>12ms 0% │         │ 192.168.1.42 │     │ US, AWS    │
+└──────────┘         │ en0 / utun3  │     └────────────┘
+                     │              │     ┌────────────┐
+┌──────────┐         │  ↑12.4 MB/s  │─ 5× │142.250.1.1 │
+│ Gateway  │── 0× ───│  ↓ 1.2 MB/s  │     │chrome (TCP)│
+│192.168.1 │         │              │     │ US, Google │
+│ <span style="color:var(--green)">●</span> 1.2ms  │         └──────────────┘     └────────────┘
+└──────────┘</div>
+      </div>
+    </div>
+
+    <div class="tab-content" id="tab-4">
+      <div class="tab-panel">
+        <div class="tab-panel-text">
+          <h3>Timeline</h3>
+          <p>Gantt-style bar chart of connection lifetimes — see connection storms, long-lived sessions, and churn at a glance.</p>
+          <ul>
+            <li>Horizontal bars spanning first-seen to last-seen</li>
+            <li>Color-coded by state (ESTABLISHED, LISTEN, SYN, FIN)</li>
+            <li>Adjustable time windows: 30s, 1m, 5m, 15m, 1h</li>
+            <li>Active vs closed connection tracking</li>
+            <li>Navigate to connections with Enter</li>
+          </ul>
+        </div>
+        <div class="tab-terminal">TIMELINE (last 5m)            ← 5m ago          now →
+─────────────────────────────────────────────────────
+ssh        10.0.0.5    <span style="color:var(--green)">████████████████████████████▓</span>
+firefox    142.250.1.1      <span style="color:var(--green)">▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓</span>
+curl       52.12.0.8             <span style="color:var(--cyan)">██</span><span style="color:var(--text-dim)">░░</span>
+node       127.0.0.1   <span style="color:var(--green)">████████████████████████████▓</span>
+DNS        8.8.8.8        <span style="color:var(--green)">█</span><span style="color:var(--text-dim)">░</span> <span style="color:var(--green)">█</span><span style="color:var(--text-dim)">░</span> <span style="color:var(--green)">█</span><span style="color:var(--text-dim)">░</span>  <span style="color:var(--green)">█</span><span style="color:var(--text-dim)">░</span> <span style="color:var(--green)">█</span><span style="color:var(--text-dim)">░</span>
+
+Active: 5  │  Closed: 2  │  Total seen: 7</div>
+      </div>
+    </div>
+
+    <div class="tab-content" id="tab-5">
+      <div class="tab-panel">
+        <div class="tab-panel-text">
+          <h3>AI Insights</h3>
+          <p>Real-time AI-powered analysis of your network traffic via a local Ollama instance. Your data never leaves your machine.</p>
+          <ul>
+            <li>Auto-analyzes every 15 seconds</li>
+            <li>On-demand analysis with a key from any tab</li>
+            <li>Detects security concerns and anomalies</li>
+            <li>Performance issue identification</li>
+            <li>Graceful fallback when Ollama unavailable</li>
+          </ul>
+        </div>
+        <div class="tab-terminal">AI INSIGHTS                    Updated 3s ago
+──────────────────────────────────────────────
+<span style="color:var(--green)">🟢</span> Network health is good. Gateway latency
+   1.2ms with 0% packet loss.
+
+<span style="color:var(--cyan)">🔵</span> 3 active HTTPS connections detected.
+   All using TLS 1.3 — good security posture.
+
+<span style="color:var(--yellow)">🟡</span> DNS query volume elevated (47 queries/min).
+   Consider local DNS caching.
+
+<span style="color:var(--green)">🟢</span> No connection anomalies detected.
+   All sockets in expected states.
+
+Model: llama3.2 │ Analysis: 2.3s │ a:Analyze</div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ════════════════════ PROTOCOLS ════════════════════ -->
+<section class="proto-section" id="protocols">
+  <div class="container">
+    <p class="section-label">// protocol_decode</p>
+    <h2 class="section-title">Deep Protocol Intelligence</h2>
+    <p class="section-sub">Layer-by-layer decoding from Ethernet frames to application payloads. Every field parsed and labeled.</p>
+    <div class="proto-grid">
+      <div class="proto-chip"><span class="name">DNS</span><span class="desc">Queries, types, response codes</span></div>
+      <div class="proto-chip"><span class="name">TLS</span><span class="desc">Handshake, version, SNI</span></div>
+      <div class="proto-chip"><span class="name">HTTP</span><span class="desc">Method, path, status</span></div>
+      <div class="proto-chip"><span class="name">TCP</span><span class="desc">Flags, streams, handshakes</span></div>
+      <div class="proto-chip"><span class="name">UDP</span><span class="desc">Ports, payloads, streams</span></div>
+      <div class="proto-chip"><span class="name">ICMP</span><span class="desc">Type/code, TTL exceeded</span></div>
+      <div class="proto-chip"><span class="name">ICMPv6</span><span class="desc">Neighbor, router, echo</span></div>
+      <div class="proto-chip"><span class="name">ARP</span><span class="desc">Who-has, is-at, MAC</span></div>
+      <div class="proto-chip"><span class="name">DHCP</span><span class="desc">Discover, Offer, ACK</span></div>
+      <div class="proto-chip"><span class="name">NTP</span><span class="desc">Version, mode, sync</span></div>
+      <div class="proto-chip"><span class="name">mDNS</span><span class="desc">Multicast discovery</span></div>
+      <div class="proto-chip"><span class="name">IPv6</span><span class="desc">Headers, flow labels</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════ ARCHITECTURE ════════════════════ -->
+<section class="arch-section" id="arch">
+  <div class="container">
+    <p class="section-label">// system_architecture</p>
+    <h2 class="section-title">Built for Speed. Designed for Clarity.</h2>
+    <p class="section-sub">Three-layer architecture: collectors gather data, app state aggregates, and the TUI renders — all in Rust with zero garbage collection.</p>
+    <div class="arch-diagram">
+┌──────────────────────────────────────────────────────┐
+│                    <span style="color:var(--text-bright)">TUI Renderer</span>                      │
+│               (ratatui / crossterm)                  │
+│  dashboard │ connections │ packets │ topology │ ...  │
+├──────────────────────────────────────────────────────┤
+│                   <span style="color:var(--text-bright)">App State Layer</span>                    │
+│          (aggregation, sorting, filtering)           │
+├────────┬────────┬────────┬────────┬──────────────────┤
+│<span style="color:var(--cyan)">Traffic</span> │<span style="color:var(--cyan)">Connect</span>│<span style="color:var(--cyan)">Config</span>  │<span style="color:var(--cyan)">Health</span>  │  <span style="color:var(--cyan)">Packets</span>          │
+│Collect │Collect │Collect │Prober  │  Collector       │
+├────────┤        ├────────┤        │                  │
+│ <span style="color:var(--yellow)">GeoIP</span>  │        │ <span style="color:var(--yellow)">Whois</span>  │        │  <span style="color:var(--yellow)">Stream Tracker</span>  │
+│ <span style="color:var(--yellow)">Trace</span>  │        │<span style="color:var(--yellow)">Insights</span>│        │  <span style="color:var(--yellow)">DNS Cache</span>      │
+└────────┴────────┴────────┴────────┴──────────────────┘
+    ▲         ▲         ▲        ▲          ▲
+ /sys/class  ss/lsof  ip route  ICMP     libpcap
+ /proc/net   netstat  resolv    ping     BPF filter</div>
+  </div>
+</section>
+
+<!-- ════════════════════ INSTALL ════════════════════ -->
+<section class="install-section" id="install">
+  <div class="container">
+    <p class="section-label">// install</p>
+    <h2 class="section-title">Up and Running in 30 Seconds</h2>
+    <p class="section-sub">One command. No config files. No daemons. Just run it.</p>
+    <div class="install-options">
+      <div class="install-card">
+        <h3>From crates.io</h3>
+        <div class="install-cmd" onclick="copyCmd(this)">
+          <span class="prompt-char">$</span> cargo install netwatch-tui
+        </div>
+        <p class="install-note">Requires Rust toolchain (1.70+) and libpcap-dev</p>
+      </div>
+      <div class="install-card">
+        <h3>From source</h3>
+        <div class="install-cmd" onclick="copyCmd(this)">
+          <span class="prompt-char">$</span> git clone https://github.com/matthart1983/netwatch.git<br>
+          <span class="prompt-char">$</span> cd netwatch && cargo build --release
+        </div>
+        <p class="install-note">Binary at ./target/release/netwatch</p>
+      </div>
+    </div>
+
+    <div class="platforms">
+      <div class="platform">
+        <div class="os-icon">🐧</div>
+        <div class="os-name">Linux</div>
+        <div class="os-note">apt install libpcap-dev</div>
+      </div>
+      <div class="platform">
+        <div class="os-icon">🍎</div>
+        <div class="os-name">macOS</div>
+        <div class="os-note">Xcode CLI Tools</div>
+      </div>
+      <div class="platform">
+        <div class="os-icon">🪟</div>
+        <div class="os-name">Windows</div>
+        <div class="os-note">Npcap required</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════ CTA ════════════════════ -->
+<section class="cta-section">
+  <h2>Your Network. <span style="color:var(--green)">Transparent.</span></h2>
+  <p>Open source. MIT licensed. No telemetry. No cloud. Your data stays on your machine.</p>
+  <div class="hero-actions" style="opacity:1">
+    <a href="https://github.com/matthart1983/netwatch" class="btn-p" target="_blank" rel="noopener">Star on GitHub</a>
+    <a href="https://crates.io/crates/netwatch-tui" class="btn-s" target="_blank" rel="noopener">View on crates.io</a>
+  </div>
+</section>
+
+<!-- ════════════════════ FOOTER ════════════════════ -->
+<footer>
+  <div class="footer-inner">
+    <div class="copy">
+      &copy; 2025 Matt Hartley. MIT License. Built with Rust.
+    </div>
+    <div class="links">
+      <a href="https://github.com/matthart1983/netwatch" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://crates.io/crates/netwatch-tui" target="_blank" rel="noopener">crates.io</a>
+      <a href="https://github.com/matthart1983/netwatch/blob/main/LICENSE" target="_blank" rel="noopener">License</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+function switchTab(idx) {
+  document.querySelectorAll('.tab-btn').forEach((b,i) => b.classList.toggle('active', i===idx));
+  document.querySelectorAll('.tab-content').forEach((c,i) => c.classList.toggle('active', i===idx));
+}
+
+function copyCmd(el) {
+  const text = el.textContent.replace(/\$/g,'').trim();
+  navigator.clipboard?.writeText(text);
+  const orig = el.style.borderColor;
+  el.style.borderColor = 'var(--green)';
+  setTimeout(() => el.style.borderColor = orig, 1000);
+}
+
+// Intersection observer for fade-in on scroll
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      e.target.style.opacity = '1';
+      e.target.style.transform = 'translateY(0)';
+    }
+  });
+}, { threshold: 0.1 });
+
+document.querySelectorAll('.feature-card, .install-card, .proto-chip, .platform').forEach(el => {
+  el.style.opacity = '0';
+  el.style.transform = 'translateY(20px)';
+  el.style.transition = 'opacity 0.6s, transform 0.6s';
+  observer.observe(el);
+});
+
+// Smooth nav background on scroll
+window.addEventListener('scroll', () => {
+  const nav = document.querySelector('nav');
+  nav.style.borderBottomColor = window.scrollY > 50 ? 'var(--border-glow)' : 'var(--border)';
+});
+</script>
+</body>
+</html>
