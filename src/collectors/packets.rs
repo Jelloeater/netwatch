@@ -827,12 +827,30 @@ fn parse_udp(
         return ("DHCP".into(), Some(src_port), Some(dst_port), info, 8, None);
     }
 
+    // SSDP (UPnP)
+    if src_port == 1900 || dst_port == 1900 {
+        if let Some((ssdp_info, ssdp_detail)) = parse_ssdp(payload) {
+            details.push(ssdp_detail);
+            let info = format!("{} → {} {}", src_ip, dst_ip, ssdp_info);
+            return ("SSDP".into(), Some(src_port), Some(dst_port), info, 8, None);
+        }
+    }
+
     // NTP
     if src_port == 123 || dst_port == 123 {
         let ntp_info = parse_ntp(payload);
         details.push(format!("NTP: {}", ntp_info));
         let info = format!("{} → {} {}", src_ip, dst_ip, ntp_info);
         return ("NTP".into(), Some(src_port), Some(dst_port), info, 8, None);
+    }
+
+    // QUIC
+    if (dst_port == 443 || src_port == 443) && !payload.is_empty() {
+        if let Some((quic_info, quic_detail)) = parse_quic(payload) {
+            details.push(quic_detail);
+            let info = format!("{}:{} → {}:{} {}", src_ip, src_port, dst_ip, dst_port, quic_info);
+            return ("QUIC".into(), Some(src_port), Some(dst_port), info, 8, None);
+        }
     }
 
     let svc = if dst_svc != "—" { dst_svc } else { src_svc };
@@ -1013,8 +1031,10 @@ fn parse_tls(data: &[u8]) -> Option<(String, String)> {
             Some((info, detail))
         }
         2 => {
-            let info = format!("Server Hello ({})", version);
-            let detail = format!("TLS: Server Hello, Version: {}", version);
+            let cipher = extract_cipher_suite(&data[5..]);
+            let cipher_str = cipher.as_deref().unwrap_or("—");
+            let info = format!("Server Hello ({}), Cipher: {}", version, cipher_str);
+            let detail = format!("TLS: Server Hello, Version: {}, Cipher Suite: {}", version, cipher_str);
             Some((info, detail))
         }
         11 => Some(("Certificate".into(), format!("TLS: Certificate, Version: {}", version))),
@@ -1074,21 +1094,114 @@ fn extract_sni(handshake: &[u8]) -> Option<String> {
     None
 }
 
+fn extract_cipher_suite(handshake: &[u8]) -> Option<String> {
+    // ServerHello: type(1) + length(3) + version(2) + random(32) = 38 bytes
+    // then session_id_length(1) + session_id(var) + cipher_suite(2)
+    if handshake.len() < 39 {
+        return None;
+    }
+    let mut pos = 38;
+    if pos >= handshake.len() { return None; }
+    let sid_len = handshake[pos] as usize;
+    pos += 1 + sid_len;
+    if pos + 2 > handshake.len() { return None; }
+    let suite = u16::from_be_bytes([handshake[pos], handshake[pos + 1]]);
+    Some(cipher_suite_name(suite))
+}
+
+fn cipher_suite_name(suite: u16) -> String {
+    match suite {
+        0x1301 => "TLS_AES_128_GCM_SHA256".into(),
+        0x1302 => "TLS_AES_256_GCM_SHA384".into(),
+        0x1303 => "TLS_CHACHA20_POLY1305_SHA256".into(),
+        0xc02b => "ECDHE_ECDSA_AES_128_GCM_SHA256".into(),
+        0xc02c => "ECDHE_ECDSA_AES_256_GCM_SHA384".into(),
+        0xc02f => "ECDHE_RSA_AES_128_GCM_SHA256".into(),
+        0xc030 => "ECDHE_RSA_AES_256_GCM_SHA384".into(),
+        0xcca8 => "ECDHE_RSA_CHACHA20_POLY1305".into(),
+        0xcca9 => "ECDHE_ECDSA_CHACHA20_POLY1305".into(),
+        0x009c => "RSA_AES_128_GCM_SHA256".into(),
+        0x009d => "RSA_AES_256_GCM_SHA384".into(),
+        0x002f => "RSA_AES_128_CBC_SHA".into(),
+        0x0035 => "RSA_AES_256_CBC_SHA".into(),
+        0x00ff => "EMPTY_RENEGOTIATION_INFO".into(),
+        _ => format!("0x{:04x}", suite),
+    }
+}
+
 fn parse_http(data: &[u8]) -> Option<(String, String)> {
     let methods = [
         "GET ", "POST ", "PUT ", "DELETE ", "HEAD ", "PATCH ", "OPTIONS ", "HTTP/",
     ];
-    let start = String::from_utf8_lossy(&data[..data.len().min(256)]);
+    let text = String::from_utf8_lossy(&data[..data.len().min(512)]);
+    let first_line = text.lines().next().unwrap_or("");
+
     for method in &methods {
-        if start.starts_with(method) {
-            let first_line = start.lines().next().unwrap_or(&start);
+        if first_line.starts_with(method) {
             let truncated = if first_line.len() > 80 {
-                format!("{}…", &first_line[..80])
+                let t: String = first_line.chars().take(80).collect();
+                format!("{}…", t)
             } else {
                 first_line.to_string()
             };
-            let detail = format!("HTTP: {}", truncated);
-            return Some((truncated.to_string(), detail));
+
+            let host = extract_header(&text, "Host");
+            let content_type = extract_header(&text, "Content-Type");
+
+            let mut detail = format!("HTTP: {}", truncated);
+            if let Some(ref h) = host {
+                detail.push_str(&format!(", Host: {}", h));
+            }
+            if let Some(ref ct) = content_type {
+                detail.push_str(&format!(", Content-Type: {}", ct));
+            }
+
+            let info = if first_line.starts_with("HTTP/") {
+                truncated.to_string()
+            } else if let Some(ref h) = host {
+                format!("{} ({})", truncated, h)
+            } else {
+                truncated.to_string()
+            };
+
+            return Some((info, detail));
+        }
+    }
+    None
+}
+
+fn parse_ssdp(data: &[u8]) -> Option<(String, String)> {
+    let text = String::from_utf8_lossy(&data[..data.len().min(512)]);
+    let first_line = text.lines().next()?;
+
+    if first_line.starts_with("M-SEARCH") {
+        let st = extract_header(&text, "ST");
+        let info = format!("M-SEARCH {}", st.as_deref().unwrap_or("*"));
+        let detail = format!("SSDP: M-SEARCH, ST: {}", st.as_deref().unwrap_or("—"));
+        Some((info, detail))
+    } else if first_line.starts_with("NOTIFY") {
+        let nt = extract_header(&text, "NT");
+        let nts = extract_header(&text, "NTS");
+        let info = format!("NOTIFY {} {}", nt.as_deref().unwrap_or(""), nts.as_deref().unwrap_or(""));
+        let detail = format!("SSDP: NOTIFY, NT: {}, NTS: {}", nt.as_deref().unwrap_or("—"), nts.as_deref().unwrap_or("—"));
+        Some((info, detail))
+    } else if first_line.starts_with("HTTP/") {
+        let server = extract_header(&text, "SERVER");
+        let st = extract_header(&text, "ST");
+        let label = server.as_deref().or(st.as_deref()).unwrap_or("");
+        let info = format!("Response {}", label);
+        let detail = format!("SSDP: Response, Server: {}", server.as_deref().unwrap_or("—"));
+        Some((info, detail))
+    } else {
+        None
+    }
+}
+
+fn extract_header(text: &str, name: &str) -> Option<String> {
+    let prefix_lower = format!("{}:", name.to_lowercase());
+    for line in text.lines() {
+        if line.to_lowercase().starts_with(&prefix_lower) {
+            return Some(line[name.len() + 1..].trim().to_string());
         }
     }
     None
@@ -1123,6 +1236,86 @@ fn parse_ntp(data: &[u8]) -> String {
         _ => "Unknown",
     };
     format!("NTPv{} {}", version, mode_str)
+}
+
+fn parse_quic(data: &[u8]) -> Option<(String, String)> {
+    if data.is_empty() {
+        return None;
+    }
+
+    let first = data[0];
+
+    // QUIC long header: bit 7 (form) = 1
+    if first & 0x80 == 0 {
+        // Short header (1-RTT) — encrypted, can't decode much
+        return Some((
+            "Protected Payload (1-RTT)".into(),
+            "QUIC: Short Header, Protected Payload".into(),
+        ));
+    }
+
+    // Long header
+    if data.len() < 5 {
+        return None;
+    }
+
+    let version = u32::from_be_bytes([data[1], data[2], data[3], data[4]]);
+    let pkt_type = (first & 0x30) >> 4;
+
+    let version_str = match version {
+        0x00000001 => "v1",
+        0x6b3343cf => "v2",
+        0x00000000 => "Version Negotiation",
+        v if v & 0x0f0f0f0f == 0x0a0a0a0a => "Greased",
+        _ => "Unknown",
+    };
+
+    let type_str = match pkt_type {
+        0 => "Initial",
+        1 => "0-RTT",
+        2 => "Handshake",
+        3 => "Retry",
+        _ => "Unknown",
+    };
+
+    // For Initial packets, try to extract SNI from the embedded ClientHello
+    if pkt_type == 0 && data.len() > 7 {
+        let sni = extract_quic_sni(data);
+        let sni_str = sni.as_deref().unwrap_or("—");
+        let info = format!("QUIC {} {} SNI: {}", version_str, type_str, sni_str);
+        let detail = format!("QUIC: {} {}, Version: {} (0x{:08x}), SNI: {}", type_str, version_str, version_str, version, sni_str);
+        return Some((info, detail));
+    }
+
+    let info = format!("QUIC {} {}", version_str, type_str);
+    let detail = format!("QUIC: {} {}, Version: {} (0x{:08x})", type_str, version_str, version_str, version);
+    Some((info, detail))
+}
+
+fn extract_quic_sni(data: &[u8]) -> Option<String> {
+    // QUIC Initial packets contain a TLS ClientHello in the payload.
+    // The packet structure is complex (variable-length connection IDs,
+    // token, length, packet number, then CRYPTO frame with the ClientHello).
+    // We do a heuristic scan for the TLS ClientHello marker and SNI extension.
+
+    // Look for TLS ClientHello handshake type (0x01) followed by a reasonable length
+    // and client_version 0x0303 (TLS 1.2, used in QUIC's TLS 1.3 ClientHello)
+    for i in 0..data.len().saturating_sub(50) {
+        if data[i] == 0x01 // handshake type: ClientHello
+            && i + 4 < data.len()
+        {
+            let len = u32::from_be_bytes([0, data[i + 1], data[i + 2], data[i + 3]]) as usize;
+            if len > 30 && len < 10000 && i + 4 + 2 <= data.len() {
+                let ver_major = data[i + 4];
+                let ver_minor = data[i + 5];
+                if ver_major == 3 && ver_minor == 3 {
+                    // Found a likely ClientHello, try to extract SNI
+                    return extract_sni(&data[i..]);
+                }
+            }
+        }
+    }
+    None
 }
 
 // ── Build packet ────────────────────────────────────────────
@@ -1354,6 +1547,7 @@ pub fn port_label(port: u16) -> &'static str {
         587 => "Submission",
         993 => "IMAPS",
         995 => "POP3S",
+        1900 => "SSDP",
         1883 => "MQTT",
         3306 => "MySQL",
         3389 => "RDP",
@@ -1657,7 +1851,7 @@ fn parse_atom<'a>(tokens: &'a [String]) -> Option<(FilterExpr, &'a [String])> {
 
     // Known protocol names
     let protocols = ["tcp", "udp", "dns", "mdns", "tls", "http", "arp", "icmp", "icmpv6",
-                     "dhcp", "ntp", "ssh", "https", "smtp", "ftp", "imap", "pop3"];
+                     "dhcp", "ntp", "ssdp", "quic", "ssh", "https", "smtp", "ftp", "imap", "pop3"];
     if protocols.iter().any(|p| word.eq_ignore_ascii_case(p)) {
         return Some((FilterExpr::Protocol(word.to_uppercase()), &tokens[1..]));
     }
