@@ -178,6 +178,35 @@ fn parse_lsof() -> Vec<Connection> {
     let mut process_name: Option<String> = None;
     let mut protocol = String::new();
     let mut state = String::new();
+    let mut local_addr = String::new();
+    let mut remote_addr = String::new();
+    let mut has_network = false;
+
+    // lsof -F field order per file descriptor is: f, t, P, n, TST=, TQR=, TQS=
+    // The state (TST=) comes AFTER the network address (n), so we must defer
+    // pushing the connection until the next file descriptor (f) or process (p)
+    // boundary, or end-of-input.
+    let flush = |connections: &mut Vec<Connection>,
+                     has_network: &mut bool,
+                     protocol: &str,
+                     local_addr: &str,
+                     remote_addr: &str,
+                     state: &str,
+                     pid: Option<u32>,
+                     process_name: &Option<String>| {
+        if *has_network {
+            connections.push(Connection {
+                protocol: protocol.to_string(),
+                local_addr: local_addr.to_string(),
+                remote_addr: remote_addr.to_string(),
+                state: state.to_string(),
+                pid,
+                process_name: process_name.clone(),
+                kernel_rtt_us: None,
+            });
+            *has_network = false;
+        }
+    };
 
     for line in text.lines() {
         if line.is_empty() {
@@ -189,6 +218,7 @@ fn parse_lsof() -> Vec<Connection> {
 
         match tag {
             b'p' => {
+                flush(&mut connections, &mut has_network, &protocol, &local_addr, &remote_addr, &state, pid, &process_name);
                 pid = value.parse().ok();
                 process_name = None;
             }
@@ -196,6 +226,7 @@ fn parse_lsof() -> Vec<Connection> {
                 process_name = Some(value.to_string());
             }
             b'f' => {
+                flush(&mut connections, &mut has_network, &protocol, &local_addr, &remote_addr, &state, pid, &process_name);
                 protocol = String::new();
                 state = String::new();
             }
@@ -209,27 +240,21 @@ fn parse_lsof() -> Vec<Connection> {
                 }
             }
             b'n' => {
-                let (local_addr, remote_addr) = if let Some(arrow_pos) = value.find("->") {
-                    let local = value[..arrow_pos].trim_matches(|c| c == '[' || c == ']').to_string();
-                    let remote = value[arrow_pos + 2..].trim_matches(|c| c == '[' || c == ']').to_string();
-                    (local, remote)
+                if let Some(arrow_pos) = value.find("->") {
+                    local_addr = value[..arrow_pos].trim_matches(|c| c == '[' || c == ']').to_string();
+                    remote_addr = value[arrow_pos + 2..].trim_matches(|c| c == '[' || c == ']').to_string();
                 } else {
-                    (value.to_string(), "*:*".to_string())
+                    local_addr = value.to_string();
+                    remote_addr = "*:*".to_string();
                 };
-
-                connections.push(Connection {
-                    protocol: protocol.clone(),
-                    local_addr,
-                    remote_addr,
-                    state: state.clone(),
-                    pid,
-                    process_name: process_name.clone(),
-                    kernel_rtt_us: None,
-                });
+                has_network = true;
             }
             _ => {}
         }
     }
+
+    // Flush the last pending connection
+    flush(&mut connections, &mut has_network, &protocol, &local_addr, &remote_addr, &state, pid, &process_name);
 
     connections
 }
