@@ -117,6 +117,7 @@ NetWatch serves two audiences through **progressive disclosure** — the same to
 | **Topology**   | ASCII box diagram showing local machine, gateway, DNS servers, and top remote hosts with connection counts and health indicators |
 | **Timeline**   | Gantt-style bar chart of connection lifetimes, color-coded by state with adjustable time windows |
 | **Insights**   | AI-powered network analysis via Ollama with auto and on-demand analysis |
+| **Settings**   | Live configuration editor accessible via `,` key. Theme cycling, refresh rate, capture interface, GeoIP paths, and all preferences with TOML persistence |
 
 ---
 
@@ -433,6 +434,8 @@ Rates are derived by diffing consecutive samples.
 | `p`         | Pause/resume data collection                 |
 | `r`         | Force refresh all data                       |
 | `q`         | Quit                                         |
+| `t`         | Cycle color theme (dark / light / solarized / dracula / nord) |
+| `,`         | Open settings menu (live edit, `S` to save, `Esc` to close) |
 | `?`         | Show help overlay                            |
 
 ---
@@ -477,7 +480,8 @@ netwatch/
 │   │   ├── dashboard.rs     # Dashboard composite view
 │   │   ├── connections.rs   # Connections table view
 │   │   ├── interfaces.rs    # Interface detail view
-│   │   └── widgets.rs       # Sparklines, gauges, help overlay
+│   │   ├── widgets.rs       # Sparklines, gauges, help overlay
+│   │   └── settings.rs     # Settings menu overlay with live config editing
 │   ├── collectors/
 │   │   ├── mod.rs
 │   │   ├── traffic.rs       # Interface RX/TX byte polling
@@ -488,6 +492,8 @@ netwatch/
 │   │   ├── mod.rs
 │   │   ├── linux.rs         # Linux-specific /proc, /sys access
 │   │   └── macos.rs         # macOS-specific ioctl, libproc
+│   ├── theme.rs             # Theming engine: 5 built-in color themes with semantic roles
+│   ├── config.rs            # TOML config persistence via directories crate
 │   └── event.rs             # Keyboard/tick event handling
 ├── README.md
 └── SPEC.md
@@ -525,6 +531,11 @@ netwatch/
 | M24 | Connection Timeline               | `[7] Timeline` tab showing a Gantt-style horizontal bar chart of connection lifetimes. Each row is a connection (process + remote), bar spans first-seen→last-seen, color-coded by state. Scrollable, with `Enter` to jump to Connections tab filtered to that entry |
 | M25 | Network Topology Map              | `[6] Topology` tab showing an ASCII box diagram of local machine, gateway, DNS, and top remote hosts with connection counts on edges. Auto-laid-out, color-coded by health, scrollable |
 | M26 | AI Network Insights               | `[8] Insights` tab with real-time AI analysis of captured traffic via Ollama. Auto-analyzes every 15s, on-demand with `a` key. Detects security concerns, performance issues, anomalies. Graceful degradation when Ollama unavailable |
+| M27 | Theming Engine                    | 5 built-in color themes (dark, light, solarized, dracula, nord) with semantic color roles. `t` key cycles themes. All UI uses theme roles instead of hardcoded colors |
+| M28 | Settings Menu & Config            | Press `,` for live config editor. TOML persistence in platform config dir. Theme, refresh rate, default tab, capture interface, GeoIP paths, BPF filter, alert thresholds |
+| M29 | Offline GeoIP                     | MaxMind .mmdb database support with automatic fallback to ip-api.com |
+| M30 | Mouse Support                     | Clickable header tabs, scroll wheel for lists/overlays, click-to-select rows |
+| M31 | Latency Sparklines & RTT Trends   | Per-connection sparkline from TCP handshake timings, color-coded RTT trend column in Connections tab |
 
 ---
 
@@ -957,6 +968,172 @@ The AI is instructed to return 3-6 bullet points with emoji severity indicators:
 | `src/ui/insights.rs` | New file. Render insights header, status bar, scrollable insight list, Ollama unavailable message, footer. |
 | `src/ui/mod.rs` | Add `pub mod insights;`, wire `Tab::Insights` in render dispatch. |
 | `src/app.rs` | Add `Tab::Insights`, `insights_collector`, `insights_scroll`, `last_insight_time` fields. Wire `8` key, `a` key (global), snapshot submission in tick handler. |
+
+---
+
+## Feature: Theming Engine
+
+### Overview
+
+NetWatch ships 5 built-in color theme presets: **dark** (default), **light**, **solarized**, **dracula**, and **nord**. All UI components reference semantic color roles rather than hardcoded colors, making the entire interface theme-aware.
+
+### Semantic Color Roles
+
+Themes define a palette of semantic roles used throughout the UI:
+
+| Role | Purpose |
+|------|---------|
+| `brand` | Header/title accents, tab highlights |
+| `status_good` | Healthy indicators, successful probes (green) |
+| `status_warn` | Warning-level alerts, elevated latency (yellow) |
+| `status_error` | Error indicators, failed probes, anomalies (red) |
+| `text_primary` | Main body text |
+| `text_muted` | Secondary text, labels, disabled items |
+| `bg_primary` | Main background |
+| `bg_secondary` | Panel/card backgrounds, alternating rows |
+| `border` | Panel borders, separators |
+
+### Theme Cycling
+
+- Press `t` from any tab (except Timeline, where `t` cycles the time window) to cycle through themes in order: dark → light → solarized → dracula → nord → dark
+- The Settings menu also provides a theme row with `◀ name ▶` arrow cycling and live preview
+- The active theme name is shown in the Settings menu
+
+### Implementation
+
+| File | Purpose |
+|------|---------|
+| `src/theme.rs` | `Theme` struct with semantic color fields, `ThemePreset` enum, `preset()` constructor for each built-in theme, `cycle_next()` method |
+
+---
+
+## Feature: Settings Menu & Persistent Configuration
+
+### Overview
+
+Press `,` to open a settings overlay for live configuration editing. All settings are persisted to a TOML config file in the platform-specific configuration directory (resolved via the `directories` crate).
+
+### Configurable Values
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `theme` | string | `"dark"` | Active color theme |
+| `default_tab` | string | `"dashboard"` | Tab shown on launch |
+| `refresh_rate_ms` | u64 | `1000` | Polling interval for traffic stats |
+| `capture_interface` | string | `""` | Capture interface (empty = all) |
+| `geoip_city_path` | string | `""` | Path to MaxMind GeoLite2-City.mmdb |
+| `geoip_asn_path` | string | `""` | Path to MaxMind GeoLite2-ASN.mmdb |
+| `timeline_window` | string | `"5m"` | Default timeline time window |
+| `packet_follow` | bool | `true` | Auto-scroll packet list |
+| `bpf_filter` | string | `""` | Default BPF capture filter |
+| `insights_model` | string | `"llama3"` | Ollama model for AI insights |
+| `alert_thresholds` | table | — | Configurable thresholds for health alerts |
+
+### UI Behaviour
+
+- Press `,` — settings overlay appears centered over the current tab
+- First row is theme with `◀ name ▶` cycling via left/right arrow keys with live preview
+- `↑↓` navigate between settings rows
+- Edit values inline with text input
+- Press `S` to save settings to the TOML config file
+- Press `Esc` to close the settings overlay (unsaved changes are discarded)
+
+### Config File Location
+
+The TOML config file is stored in the platform config directory:
+- **Linux**: `~/.config/netwatch/config.toml`
+- **macOS**: `~/Library/Application Support/com.netwatch/config.toml`
+
+### Implementation Files
+
+| File | Purpose |
+|------|---------|
+| `src/config.rs` | `NetwatchConfig` struct, TOML serialization/deserialization, platform path resolution via `directories` crate, `load()` and `save()` methods |
+| `src/ui/settings.rs` | Settings overlay rendering, row navigation, inline editing, theme cycling widget, save/close key handling |
+
+---
+
+## Feature: Offline GeoIP Enrichment
+
+### Overview
+
+NetWatch supports offline GeoIP lookups using MaxMind `.mmdb` database files via the `maxminddb` crate. When configured, this provides instant, unlimited IP geolocation without network requests.
+
+### Behaviour
+
+- If `geoip_city_path` and/or `geoip_asn_path` are set in config and point to valid `.mmdb` files, NetWatch uses them for all GeoIP lookups
+- When `.mmdb` files are unavailable or not configured, NetWatch automatically falls back to the existing `ip-api.com` HTTP lookups (rate-limited, cached)
+- City database provides country, city, and coordinates; ASN database provides organization and AS number
+
+### Configuration
+
+Paths are configured via the Settings menu or directly in `config.toml`:
+
+```toml
+geoip_city_path = "/path/to/GeoLite2-City.mmdb"
+geoip_asn_path = "/path/to/GeoLite2-ASN.mmdb"
+```
+
+### Implementation
+
+| File | Purpose |
+|------|---------|
+| `src/collectors/geo.rs` | `.mmdb` file loading via `maxminddb` crate, lookup with automatic fallback to ip-api.com |
+
+---
+
+## Feature: Mouse Support
+
+### Overview
+
+NetWatch supports mouse interaction via crossterm `MouseEvent` handling, providing an alternative to keyboard-only navigation.
+
+### Supported Interactions
+
+| Interaction | Behaviour |
+|-------------|-----------|
+| **Click header tabs** | Click on any tab label (`[1] Dash`, `[2] Conn`, etc.) to switch to that tab |
+| **Scroll wheel** | Scroll up/down in all scrollable lists, tables, and overlays (connections, packets, insights, help, stream view, settings) |
+| **Click-to-select** | Click on a table row in Connections, Packets, or other list views to select that row |
+
+### Implementation
+
+Mouse events are captured via crossterm's `EnableMouseCapture` / `DisableMouseCapture` and handled in the event loop alongside keyboard events.
+
+---
+
+## Feature: Latency Sparklines & RTT Trends
+
+### Overview
+
+Each connection in the Connections tab displays a latency sparkline and a color-coded RTT trend column, providing at-a-glance visibility into per-connection latency behaviour.
+
+### Sparkline
+
+- Uses Unicode block characters: `▁▂▃▄▅▆▇█`
+- Derived from TCP handshake timing data (SYN → SYN-ACK intervals) collected per stream
+- Shows the last N RTT samples as a compact inline sparkline in the Connections table
+
+### Color Coding
+
+| RTT Range | Color | Block Range |
+|-----------|-------|-------------|
+| < 10ms | Green | `▁▂▃` |
+| 10ms – 100ms | Yellow | `▃▄▅` |
+| > 100ms | Red | `▆▇█` |
+
+### RTT Trend Column
+
+The Connections tab includes an `RTT` column showing:
+- Current smoothed RTT value
+- Sparkline of recent samples
+- Color-coded based on the latest RTT value
+
+### Implementation
+
+| File | Purpose |
+|------|---------|
+| `src/ui/connections.rs` | Sparkline rendering with Unicode blocks, RTT trend column, color-coded RTT display |
 
 ---
 

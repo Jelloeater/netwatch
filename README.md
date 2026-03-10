@@ -55,6 +55,13 @@ NetWatch is a lightweight, keyboard-driven TUI application that gives you instan
 - **Traceroute** — Built-in hop-by-hop traceroute from Topology or Connections tab. Press `T` on any remote host to see the full path with color-coded RTT per hop
 - **Connection timeline** — Gantt-style bar chart of connection lifetimes, color-coded by state with adjustable time windows (30s to 1h)
 - **AI network insights** — Real-time AI analysis via Ollama (llama3.2). Auto-analyzes every 15s, on-demand with `a` key. Detects security concerns, performance issues, and anomalies
+- **Theming engine** — 5 built-in color themes (dark, light, solarized, dracula, nord) with instant switching via `t` key. All UI uses semantic color roles
+- **Settings menu** — Press `,` for live configuration editing with TOML persistence. Theme, refresh rate, default tab, capture interface, and more
+- **Persistent configuration** — TOML config file in platform-specific directory. Saves theme, default tab, refresh rate, BPF filter, alert thresholds, and all preferences
+- **Offline GeoIP** — MaxMind .mmdb database support for offline IP geolocation with automatic online fallback to ip-api.com
+- **Mouse support** — Clickable header tabs, scroll wheel navigation in all lists and overlays, click-to-select for table rows
+- **Latency sparklines** — Per-connection RTT trend using Unicode block characters derived from TCP handshake timings
+- **RTT trend column** — Color-coded sparkline history in the Connections tab showing per-connection latency over time
 
 ---
 
@@ -120,6 +127,8 @@ Full scrollable list of every active network socket:
 - Press `Enter` to jump to Packets tab with a filter matching the selected connection
 - Press `W` for whois lookup on the remote IP
 - Press `g` to toggle GeoIP location column
+
+Each connection shows a **latency sparkline** (Unicode block characters from TCP handshake timings) and a color-coded **RTT trend** column.
 
 ### `3` Interfaces
 
@@ -205,6 +214,8 @@ AI-powered network analysis via local Ollama:
 | `r` | Force refresh all data |
 | `g` | Toggle GeoIP location display |
 | `?` | Show help overlay |
+| `t` | Cycle color theme (dark / light / solarized / dracula / nord) |
+| `,` | Open settings menu |
 | `q` / `Ctrl+C` | Quit |
 
 ### Connections tab
@@ -326,6 +337,8 @@ netwatch/
 │   ├── main.rs                  # Entry point, terminal setup
 │   ├── app.rs                   # App state, event loop, tab management
 │   ├── event.rs                 # Keyboard & tick event handling
+│   ├── theme.rs                 # Theming engine, 5 built-in presets
+│   ├── config.rs                # TOML configuration persistence
 │   ├── ui/
 │   │   ├── dashboard.rs         # Dashboard composite view
 │   │   ├── connections.rs       # Connections table view
@@ -335,6 +348,7 @@ netwatch/
 │   │   ├── topology.rs          # Network topology map view
 │   │   ├── timeline.rs          # Connection timeline view
 │   │   ├── insights.rs          # AI network insights view
+│   │   ├── settings.rs          # Settings menu overlay
 │   │   ├── help.rs              # Scrollable help overlay
 │   │   └── widgets.rs           # Formatting helpers
 │   ├── collectors/
@@ -367,7 +381,7 @@ netwatch/
 | Config | 10s | `netstat -rn`, `scutil --dns` | `ip route`, `/etc/resolv.conf` |
 | Health | 5s | `ping -c 3 -t 1` | `ping -c 3 -W 1` |
 | Packets | Real-time | libpcap (BPF) | libpcap |
-| GeoIP | On-demand | ip-api.com (HTTP) | ip-api.com (HTTP) |
+| GeoIP | On-demand | MaxMind .mmdb (offline) / ip-api.com fallback | MaxMind .mmdb (offline) / ip-api.com fallback |
 | Whois | On-demand | rdap.org (HTTPS) | rdap.org (HTTPS) |
 
 ### Packet Decoding Pipeline
@@ -396,6 +410,9 @@ Raw bytes → Ethernet → IPv4/IPv6/ARP → TCP/UDP/ICMP → DNS/TLS/HTTP/DHCP/
 | [anyhow](https://crates.io/crates/anyhow) | Error handling |
 | [ureq](https://crates.io/crates/ureq) | HTTP client (GeoIP, Whois, Ollama AI) |
 | [serde_json](https://crates.io/crates/serde_json) | JSON parsing (API responses) |
+| [toml](https://crates.io/crates/toml) / [serde](https://crates.io/crates/serde) | Configuration file parsing and serialization |
+| [maxminddb](https://crates.io/crates/maxminddb) | Offline GeoIP database (.mmdb) reader |
+| [directories](https://crates.io/crates/directories) | Platform-specific config/data directory paths |
 
 ---
 
@@ -412,6 +429,8 @@ Raw bytes → Ethernet → IPv4/IPv6/ARP → TCP/UDP/ICMP → DNS/TLS/HTTP/DHCP/
 | GeoIP/Whois not loading | Requires internet access; results appear after a short delay |
 | AI insights shows "Ollama unavailable" | Install and start Ollama: `ollama serve`, then `ollama pull llama3.2` |
 | AI analysis is slow | Ollama runs locally — performance depends on your hardware. Consider a smaller model |
+| Theme not saving | Press `S` in settings menu to save. Config stored in platform config directory |
+| GeoIP showing "Unknown" | Download MaxMind GeoLite2-City.mmdb and configure path in settings |
 
 ---
 
