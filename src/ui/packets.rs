@@ -29,9 +29,9 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
 
 fn render_header(f: &mut Frame, app: &App, area: Rect, pkt_count: usize) {
     let cap_status = if app.packet_collector.is_capturing() {
-        Span::styled("● CAPTURING", Style::default().fg(Color::Red).bold())
+        Span::styled("● CAPTURING", Style::default().fg(app.theme.status_error).bold())
     } else {
-        Span::styled("○ STOPPED", Style::default().fg(Color::DarkGray))
+        Span::styled("○ STOPPED", Style::default().fg(app.theme.text_muted))
     };
 
     let iface_name = app.capture_interface.as_str();
@@ -43,8 +43,8 @@ fn render_header(f: &mut Frame, app: &App, area: Rect, pkt_count: usize) {
     ];
     if let Some(ref bpf) = app.bpf_filter_active {
         extra.push(Span::raw("  "));
-        extra.push(Span::styled("BPF: ", Style::default().fg(Color::Yellow).bold()));
-        extra.push(Span::styled(bpf.clone(), Style::default().fg(Color::White)));
+        extra.push(Span::styled("BPF: ", Style::default().fg(app.theme.key_hint).bold()));
+        extra.push(Span::styled(bpf.clone(), Style::default().fg(app.theme.text_primary)));
     }
 
     if let Some(e) = app.packet_collector.get_error() {
@@ -53,13 +53,13 @@ fn render_header(f: &mut Frame, app: &App, area: Rect, pkt_count: usize) {
             line1,
             Line::from(vec![
                 Span::raw(" ⚠ "),
-                Span::styled(e, Style::default().fg(Color::Red).bold()),
+                Span::styled(e, Style::default().fg(app.theme.status_error).bold()),
             ]),
         ];
         let header = Paragraph::new(lines).block(
             Block::default()
                 .borders(Borders::BOTTOM)
-                .border_style(Style::default().fg(Color::DarkGray)),
+                .border_style(Style::default().fg(app.theme.border)),
         );
         f.render_widget(header, area);
     } else if let Some(ref status) = app.export_status {
@@ -68,13 +68,13 @@ fn render_header(f: &mut Frame, app: &App, area: Rect, pkt_count: usize) {
             line1,
             Line::from(vec![
                 Span::raw(" ✓ "),
-                Span::styled(status.clone(), Style::default().fg(Color::Green).bold()),
+                Span::styled(status.clone(), Style::default().fg(app.theme.status_good).bold()),
             ]),
         ];
         let header = Paragraph::new(lines).block(
             Block::default()
                 .borders(Borders::BOTTOM)
-                .border_style(Style::default().fg(Color::DarkGray)),
+                .border_style(Style::default().fg(app.theme.border)),
         );
         f.render_widget(header, area);
     } else {
@@ -96,30 +96,30 @@ fn build_packets_header_line(app: &App, extra: Vec<Span<'static>>) -> Line<'stat
         ("8", "Insights", Tab::Insights),
     ];
     let mut spans: Vec<Span<'static>> = vec![
-        Span::styled("◉ NetWatch ", Style::default().fg(Color::Cyan).bold()),
+        Span::styled("◉ NetWatch ", Style::default().fg(app.theme.brand).bold()),
     ];
     for (i, (num, name, tab)) in tabs.iter().enumerate() {
         if i > 0 {
-            spans.push(Span::styled(" │ ", Style::default().fg(Color::DarkGray)));
+            spans.push(Span::styled(" │ ", Style::default().fg(app.theme.border)));
         }
         let label = format!("[{}] {}", num, name);
         if *tab == app.current_tab {
-            spans.push(Span::styled(label, Style::default().fg(Color::Yellow).bold()));
+            spans.push(Span::styled(label, Style::default().fg(app.theme.active_tab).bold()));
         } else {
-            spans.push(Span::styled(label, Style::default().fg(Color::DarkGray)));
+            spans.push(Span::styled(label, Style::default().fg(app.theme.text_muted)));
         }
     }
     if app.paused {
         spans.push(Span::styled(
             " ⏸ PAUSED ",
-            Style::default().fg(Color::Black).bg(Color::Yellow),
+            Style::default().fg(app.theme.text_inverse).bg(app.theme.key_hint),
         ));
     }
     for s in extra {
         spans.push(s);
     }
     spans.push(Span::raw("  "));
-    spans.push(Span::styled(now, Style::default().fg(Color::DarkGray)));
+    spans.push(Span::styled(now, Style::default().fg(app.theme.text_muted)));
     Line::from(spans)
 }
 
@@ -134,15 +134,15 @@ fn truncate_info(s: &str, max: usize) -> String {
 
 fn render_packet_list(f: &mut Frame, app: &App, packets: &[CapturedPacket], area: Rect) {
     let header = Row::new(vec![
-        Cell::from("!").style(Style::default().fg(Color::Cyan).bold()),
-        Cell::from("#").style(Style::default().fg(Color::Cyan).bold()),
-        Cell::from("Time").style(Style::default().fg(Color::Cyan).bold()),
-        Cell::from("Source").style(Style::default().fg(Color::Cyan).bold()),
-        Cell::from("Destination").style(Style::default().fg(Color::Cyan).bold()),
-        Cell::from("Proto").style(Style::default().fg(Color::Cyan).bold()),
-        Cell::from("Len").style(Style::default().fg(Color::Cyan).bold()),
-        Cell::from("Stream").style(Style::default().fg(Color::Cyan).bold()),
-        Cell::from("Info").style(Style::default().fg(Color::Cyan).bold()),
+        Cell::from("!").style(Style::default().fg(app.theme.brand).bold()),
+        Cell::from("#").style(Style::default().fg(app.theme.brand).bold()),
+        Cell::from("Time").style(Style::default().fg(app.theme.brand).bold()),
+        Cell::from("Source").style(Style::default().fg(app.theme.brand).bold()),
+        Cell::from("Destination").style(Style::default().fg(app.theme.brand).bold()),
+        Cell::from("Proto").style(Style::default().fg(app.theme.brand).bold()),
+        Cell::from("Len").style(Style::default().fg(app.theme.brand).bold()),
+        Cell::from("Stream").style(Style::default().fg(app.theme.brand).bold()),
+        Cell::from("Info").style(Style::default().fg(app.theme.brand).bold()),
     ])
     .height(1);
 
@@ -172,19 +172,19 @@ fn render_packet_list(f: &mut Frame, app: &App, packets: &[CapturedPacket], area
         .skip(offset)
         .take(visible_height)
         .map(|pkt| {
-            let proto_style = protocol_color(&pkt.protocol);
+            let proto_style = protocol_color(&pkt.protocol, &app.theme);
             let selected = app.packet_selected == Some(pkt.id);
             let row_style = if selected {
-                Style::default().bg(Color::Rgb(40, 40, 60))
+                Style::default().bg(app.theme.selection_bg)
             } else {
-                expert_row_style(pkt.expert)
+                expert_row_style(pkt.expert, &app.theme)
             };
 
             let is_bookmarked = app.bookmarks.contains(&pkt.id);
             let (expert_icon, expert_style) = if is_bookmarked {
-                ("★", Style::default().fg(Color::Yellow).bold())
+                ("★", Style::default().fg(app.theme.status_warn).bold())
             } else {
-                expert_indicator(pkt.expert)
+                expert_indicator(pkt.expert, &app.theme)
             };
 
             // Use stored hostname, or try live cache lookup for late-resolved IPs
@@ -219,13 +219,13 @@ fn render_packet_list(f: &mut Frame, app: &App, packets: &[CapturedPacket], area
 
             Row::new(vec![
                 Cell::from(expert_icon).style(expert_style),
-                Cell::from(pkt.id.to_string()).style(Style::default().fg(Color::DarkGray)),
+                Cell::from(pkt.id.to_string()).style(Style::default().fg(app.theme.text_muted)),
                 Cell::from(pkt.timestamp.clone()),
                 Cell::from(src_display),
                 Cell::from(dst_display),
                 Cell::from(pkt.protocol.clone()).style(proto_style),
                 Cell::from(pkt.length.to_string()),
-                Cell::from(stream_label).style(Style::default().fg(Color::DarkGray)),
+                Cell::from(stream_label).style(Style::default().fg(app.theme.text_muted)),
                 Cell::from(truncate_info(&pkt.info, 40)),
             ])
             .style(row_style)
@@ -262,7 +262,7 @@ fn render_packet_list(f: &mut Frame, app: &App, packets: &[CapturedPacket], area
         Block::default()
             .title(title)
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::DarkGray))
+            .border_style(Style::default().fg(app.theme.border))
     });
 
     f.render_widget(table, area);
@@ -310,7 +310,7 @@ fn render_detail(f: &mut Frame, app: &App, packets: &[CapturedPacket], area: Rec
                         let org = if geo.org.is_empty() { String::new() } else { format!(" — {}", geo.org) };
                         geo_lines.push(Line::from(Span::styled(
                             format!("  Geo {label}: {loc}{org}"),
-                            Style::default().fg(Color::LightBlue),
+                            Style::default().fg(app.theme.status_info),
                         )));
                     }
                 }
@@ -333,7 +333,7 @@ fn render_detail(f: &mut Frame, app: &App, packets: &[CapturedPacket], area: Rec
                     if !whois.description.is_empty() {
                         whois_lines.push(Line::from(Span::styled(
                             format!("         {}", whois.description),
-                            Style::default().fg(Color::DarkGray),
+                            Style::default().fg(app.theme.text_muted),
                         )));
                     }
                 }
@@ -342,15 +342,15 @@ fn render_detail(f: &mut Frame, app: &App, packets: &[CapturedPacket], area: Rec
             // Protocol detail lines with color per layer
             let mut detail_lines: Vec<Line> = pkt.details.iter().map(|line| {
                 let color = if line.starts_with("Frame:") {
-                    Color::White
+                    app.theme.text_primary
                 } else if line.starts_with("Ethernet:") {
-                    Color::Cyan
+                    app.theme.brand
                 } else if line.starts_with("IPv4:") || line.starts_with("IPv6:") {
-                    Color::Green
+                    app.theme.status_good
                 } else if line.starts_with("TCP:") || line.starts_with("UDP:") {
                     Color::Magenta
                 } else if line.starts_with("ICMP") {
-                    Color::Yellow
+                    app.theme.status_warn
                 } else {
                     Color::LightYellow
                 };
@@ -376,7 +376,7 @@ fn render_detail(f: &mut Frame, app: &App, packets: &[CapturedPacket], area: Rec
                         if !hs_parts.is_empty() {
                             detail_lines.push(Line::from(Span::styled(
                                 format!("  ⏱ Handshake: {}", hs_parts.join("  │  ")),
-                                Style::default().fg(Color::Green),
+                                Style::default().fg(app.theme.status_good),
                             )));
                         }
                     }
@@ -388,19 +388,19 @@ fn render_detail(f: &mut Frame, app: &App, packets: &[CapturedPacket], area: Rec
                     Block::default()
                         .title(" Protocol Detail ")
                         .borders(Borders::ALL)
-                        .border_style(Style::default().fg(Color::DarkGray)),
+                        .border_style(Style::default().fg(app.theme.border)),
                 );
             f.render_widget(proto_detail, rows[0]);
 
             if has_payload {
                 // Payload content (readable text)
                 let payload = Paragraph::new(pkt.payload_text.clone())
-                    .style(Style::default().fg(Color::White))
+                    .style(Style::default().fg(app.theme.text_primary))
                     .block(
                         Block::default()
                             .title(" Payload Content ")
                             .borders(Borders::ALL)
-                            .border_style(Style::default().fg(Color::DarkGray)),
+                            .border_style(Style::default().fg(app.theme.border)),
                     )
                     .wrap(Wrap { trim: false });
                 f.render_widget(payload, rows[1]);
@@ -411,7 +411,7 @@ fn render_detail(f: &mut Frame, app: &App, packets: &[CapturedPacket], area: Rec
                     .constraints([Constraint::Percentage(55), Constraint::Percentage(45)])
                     .split(rows[2]);
 
-                render_hex_ascii(f, pkt, hex_ascii);
+                render_hex_ascii(f, pkt, hex_ascii, &app.theme);
             } else {
                 // Hex + ASCII side by side (no payload text)
                 let hex_ascii = Layout::default()
@@ -419,42 +419,42 @@ fn render_detail(f: &mut Frame, app: &App, packets: &[CapturedPacket], area: Rec
                     .constraints([Constraint::Percentage(55), Constraint::Percentage(45)])
                     .split(rows[1]);
 
-                render_hex_ascii(f, pkt, hex_ascii);
+                render_hex_ascii(f, pkt, hex_ascii, &app.theme);
             }
         }
         None => {
             let hint = Paragraph::new(" Select a packet with ↑↓ to inspect")
-                .style(Style::default().fg(Color::DarkGray))
+                .style(Style::default().fg(app.theme.text_muted))
                 .block(
                     Block::default()
                         .title(" Packet Detail ")
                         .borders(Borders::ALL)
-                        .border_style(Style::default().fg(Color::DarkGray)),
+                        .border_style(Style::default().fg(app.theme.border)),
                 );
             f.render_widget(hint, area);
         }
     }
 }
 
-fn render_hex_ascii(f: &mut Frame, pkt: &CapturedPacket, chunks: std::rc::Rc<[Rect]>) {
+fn render_hex_ascii(f: &mut Frame, pkt: &CapturedPacket, chunks: std::rc::Rc<[Rect]>, theme: &crate::theme::Theme) {
     let hex = Paragraph::new(pkt.raw_hex.clone())
-        .style(Style::default().fg(Color::Green))
+        .style(Style::default().fg(theme.status_good))
         .block(
             Block::default()
                 .title(" Hex Dump ")
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::DarkGray)),
+                .border_style(Style::default().fg(theme.border)),
         )
         .wrap(Wrap { trim: false });
     f.render_widget(hex, chunks[0]);
 
     let ascii = Paragraph::new(pkt.raw_ascii.clone())
-        .style(Style::default().fg(Color::Yellow))
+        .style(Style::default().fg(theme.status_warn))
         .block(
             Block::default()
                 .title(" ASCII ")
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::DarkGray)),
+                .border_style(Style::default().fg(theme.border)),
         )
         .wrap(Wrap { trim: false });
     f.render_widget(ascii, chunks[1]);
@@ -465,9 +465,9 @@ fn render_stream_view(f: &mut Frame, app: &App, area: Rect) {
         Some(idx) => idx,
         None => {
             let hint = Paragraph::new(" No stream selected")
-                .style(Style::default().fg(Color::DarkGray))
+                .style(Style::default().fg(app.theme.text_muted))
                 .block(Block::default().title(" Stream View ").borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::DarkGray)));
+                    .border_style(Style::default().fg(app.theme.border)));
             f.render_widget(hint, area);
             return;
         }
@@ -477,9 +477,9 @@ fn render_stream_view(f: &mut Frame, app: &App, area: Rect) {
         Some(s) => s,
         None => {
             let hint = Paragraph::new(format!(" Stream #{stream_index} not found"))
-                .style(Style::default().fg(Color::Red))
+                .style(Style::default().fg(app.theme.status_error))
                 .block(Block::default().title(" Stream View ").borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::DarkGray)));
+                    .border_style(Style::default().fg(app.theme.border)));
             f.render_widget(hint, area);
             return;
         }
@@ -510,34 +510,34 @@ fn render_stream_view(f: &mut Frame, app: &App, area: Rect) {
     };
     let mode_label = if app.stream_hex_mode { "Hex" } else { "Text" };
     let mut header_spans = vec![
-        Span::styled(format!(" {proto_str} Stream #{stream_index} "), Style::default().fg(Color::Cyan).bold()),
+        Span::styled(format!(" {proto_str} Stream #{stream_index} "), Style::default().fg(app.theme.brand).bold()),
         Span::raw(format!("── {a_ip}:{a_port} ↔ {b_ip}:{b_port}  ")),
-        Span::styled(dir_label, Style::default().fg(Color::Yellow)),
+        Span::styled(dir_label, Style::default().fg(app.theme.key_hint)),
         Span::raw("  "),
-        Span::styled(format!("[h] {mode_label}"), Style::default().fg(Color::Yellow)),
+        Span::styled(format!("[h] {mode_label}"), Style::default().fg(app.theme.key_hint)),
     ];
     if let Some(ref hs) = stream.handshake {
         header_spans.push(Span::raw("  "));
         if let Some(total) = hs.total_ms() {
             header_spans.push(Span::styled(
                 format!("⏱ {:.2}ms", total),
-                Style::default().fg(Color::Green).bold(),
+                Style::default().fg(app.theme.status_good).bold(),
             ));
         } else if let Some(syn_sa) = hs.syn_to_syn_ack_ms() {
             header_spans.push(Span::styled(
                 format!("⏱ SYN→SA {:.2}ms", syn_sa),
-                Style::default().fg(Color::Yellow),
+                Style::default().fg(app.theme.status_warn),
             ));
         } else {
             header_spans.push(Span::styled(
                 "⏱ SYN…",
-                Style::default().fg(Color::DarkGray),
+                Style::default().fg(app.theme.text_muted),
             ));
         }
     }
     let header = Paragraph::new(Line::from(header_spans))
         .block(Block::default().borders(Borders::BOTTOM)
-            .border_style(Style::default().fg(Color::DarkGray)));
+            .border_style(Style::default().fg(app.theme.border)));
     f.render_widget(header, chunks[0]);
 
     // Build content lines
@@ -558,7 +558,7 @@ fn render_stream_view(f: &mut Frame, app: &App, area: Rect) {
                 StreamDirection::BtoA => "←",
             };
             let arrow_color = match seg.direction {
-                StreamDirection::AtoB => Color::Green,
+                StreamDirection::AtoB => app.theme.status_good,
                 StreamDirection::BtoA => Color::Magenta,
             };
             for chunk in seg.payload.chunks(16) {
@@ -568,8 +568,8 @@ fn render_stream_view(f: &mut Frame, app: &App, area: Rect) {
                 }).collect();
                 lines.push(Line::from(vec![
                     Span::styled(format!(" {arrow} "), Style::default().fg(arrow_color)),
-                    Span::styled(format!("{:<50}", hex), Style::default().fg(Color::Green)),
-                    Span::styled(ascii, Style::default().fg(Color::Yellow)),
+                    Span::styled(format!("{:<50}", hex), Style::default().fg(app.theme.status_good)),
+                    Span::styled(ascii, Style::default().fg(app.theme.status_warn)),
                 ]));
             }
         }
@@ -583,7 +583,7 @@ fn render_stream_view(f: &mut Frame, app: &App, area: Rect) {
                 StreamDirection::BtoA => "←",
             };
             let arrow_color = match seg.direction {
-                StreamDirection::AtoB => Color::Green,
+                StreamDirection::AtoB => app.theme.status_good,
                 StreamDirection::BtoA => Color::Magenta,
             };
             let text: String = seg.payload.iter().map(|&b| {
@@ -614,16 +614,16 @@ fn render_stream_view(f: &mut Frame, app: &App, area: Rect) {
     let content = Paragraph::new(visible_lines)
         .block(Block::default()
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::DarkGray)))
+            .border_style(Style::default().fg(app.theme.border)))
         .wrap(Wrap { trim: false });
     f.render_widget(content, chunks[1]);
 
     // Status bar
     let mut status_spans = vec![
-        Span::styled(format!(" {} packets", stream.packet_count), Style::default().fg(Color::White)),
+        Span::styled(format!(" {} packets", stream.packet_count), Style::default().fg(app.theme.text_primary)),
         Span::raw(format!(", {} segments", filtered_segments.len())),
         Span::raw(" │ "),
-        Span::styled("A→B: ", Style::default().fg(Color::Green)),
+        Span::styled("A→B: ", Style::default().fg(app.theme.status_good)),
         Span::raw(format_bytes(stream.total_bytes_a_to_b)),
         Span::raw(" │ "),
         Span::styled("B→A: ", Style::default().fg(Color::Magenta)),
@@ -634,26 +634,26 @@ fn render_stream_view(f: &mut Frame, app: &App, area: Rect) {
         if let Some(syn_sa) = hs.syn_to_syn_ack_ms() {
             status_spans.push(Span::styled(
                 format!("SYN→SA:{:.1}ms ", syn_sa),
-                Style::default().fg(Color::Cyan),
+                Style::default().fg(app.theme.brand),
             ));
         }
         if let Some(sa_ack) = hs.syn_ack_to_ack_ms() {
             status_spans.push(Span::styled(
                 format!("SA→ACK:{:.1}ms ", sa_ack),
-                Style::default().fg(Color::Cyan),
+                Style::default().fg(app.theme.brand),
             ));
         }
         if let Some(total) = hs.total_ms() {
             status_spans.push(Span::styled(
                 format!("Total:{:.1}ms", total),
-                Style::default().fg(Color::Green),
+                Style::default().fg(app.theme.status_good),
             ));
         }
     }
     status_spans.push(Span::raw(format!(" │ Lines: {total_lines} ")));
     let status = Paragraph::new(Line::from(status_spans))
         .block(Block::default().borders(Borders::TOP)
-            .border_style(Style::default().fg(Color::DarkGray)));
+            .border_style(Style::default().fg(app.theme.border)));
     f.render_widget(status, chunks[2]);
 }
 
@@ -667,13 +667,13 @@ fn render_footer(f: &mut Frame, app: &App, area: Rect) {
     // Filter input mode — show editable filter bar
     if app.packet_filter_input {
         let filter_line = Line::from(vec![
-            Span::styled(" / ", Style::default().fg(Color::Cyan).bold()),
+            Span::styled(" / ", Style::default().fg(app.theme.brand).bold()),
             Span::raw(&app.packet_filter_text),
-            Span::styled("█", Style::default().fg(Color::White)),
+            Span::styled("█", Style::default().fg(app.theme.text_primary)),
         ]);
         let bar = Paragraph::new(filter_line)
             .block(Block::default().borders(Borders::TOP)
-                .border_style(Style::default().fg(Color::Yellow)));
+                .border_style(Style::default().fg(app.theme.key_hint)));
         f.render_widget(bar, area);
         return;
     }
@@ -683,7 +683,7 @@ fn render_footer(f: &mut Frame, app: &App, area: Rect) {
         let filter_line = Line::from(vec![
             Span::styled(" BPF: ", Style::default().fg(Color::Magenta).bold()),
             Span::raw(&app.bpf_filter_text),
-            Span::styled("█", Style::default().fg(Color::White)),
+            Span::styled("█", Style::default().fg(app.theme.text_primary)),
         ]);
         let bar = Paragraph::new(filter_line)
             .block(Block::default().borders(Borders::TOP)
@@ -694,11 +694,11 @@ fn render_footer(f: &mut Frame, app: &App, area: Rect) {
 
     let mut hints = if app.stream_view_open {
         vec![
-            Span::styled("Esc", Style::default().fg(Color::Yellow).bold()),
+            Span::styled("Esc", Style::default().fg(app.theme.key_hint).bold()),
             Span::raw(":Close  "),
-            Span::styled("→←", Style::default().fg(Color::Yellow).bold()),
+            Span::styled("→←", Style::default().fg(app.theme.key_hint).bold()),
             Span::raw(":Direction  "),
-            Span::styled("h", Style::default().fg(Color::Yellow).bold()),
+            Span::styled("h", Style::default().fg(app.theme.key_hint).bold()),
             Span::raw(":Hex/Text"),
         ]
     } else {
@@ -708,57 +708,57 @@ fn render_footer(f: &mut Frame, app: &App, area: Rect) {
             "Capture"
         };
         vec![
-            Span::styled("c", Style::default().fg(Color::Yellow).bold()),
+            Span::styled("c", Style::default().fg(app.theme.key_hint).bold()),
             Span::raw(format!(":{capture_key}  ")),
-            Span::styled("/", Style::default().fg(Color::Yellow).bold()),
+            Span::styled("/", Style::default().fg(app.theme.key_hint).bold()),
             Span::raw(":Filter  "),
-            Span::styled("s", Style::default().fg(Color::Yellow).bold()),
+            Span::styled("s", Style::default().fg(app.theme.key_hint).bold()),
             Span::raw(":Stream  "),
-            Span::styled("f", Style::default().fg(Color::Yellow).bold()),
+            Span::styled("f", Style::default().fg(app.theme.key_hint).bold()),
             Span::raw(":Follow"),
         ]
     };
 
     let follow_indicator = if app.packet_follow {
-        Span::styled(" [FOLLOW]", Style::default().fg(Color::Green).bold())
+        Span::styled(" [FOLLOW]", Style::default().fg(app.theme.status_good).bold())
     } else {
         Span::raw("")
     };
     hints.push(follow_indicator);
 
     if let Some(ref ft) = app.packet_filter_active {
-        hints.push(Span::styled(" [FILTER: ", Style::default().fg(Color::Yellow).bold()));
-        hints.push(Span::styled(ft.clone(), Style::default().fg(Color::White)));
-        hints.push(Span::styled("]", Style::default().fg(Color::Yellow).bold()));
+        hints.push(Span::styled(" [FILTER: ", Style::default().fg(app.theme.key_hint).bold()));
+        hints.push(Span::styled(ft.clone(), Style::default().fg(app.theme.text_primary)));
+        hints.push(Span::styled("]", Style::default().fg(app.theme.key_hint).bold()));
     }
 
-    crate::ui::widgets::render_footer(f, area, hints);
+    crate::ui::widgets::render_footer(f, app, area, hints);
 }
 
-fn protocol_color(proto: &str) -> Style {
+fn protocol_color(proto: &str, theme: &crate::theme::Theme) -> Style {
     match proto {
         "TCP" => Style::default().fg(Color::Magenta),
         "UDP" => Style::default().fg(Color::Blue),
-        "ICMP" | "ICMPv6" => Style::default().fg(Color::Yellow),
-        "ARP" => Style::default().fg(Color::Cyan),
-        "DNS" => Style::default().fg(Color::Green),
-        _ => Style::default().fg(Color::White),
+        "ICMP" | "ICMPv6" => Style::default().fg(theme.status_warn),
+        "ARP" => Style::default().fg(theme.brand),
+        "DNS" => Style::default().fg(theme.status_good),
+        _ => Style::default().fg(theme.text_primary),
     }
 }
 
-fn expert_indicator(severity: ExpertSeverity) -> (&'static str, Style) {
+fn expert_indicator(severity: ExpertSeverity, theme: &crate::theme::Theme) -> (&'static str, Style) {
     match severity {
-        ExpertSeverity::Error => ("●", Style::default().fg(Color::Red).bold()),
-        ExpertSeverity::Warn  => ("▲", Style::default().fg(Color::Yellow)),
-        ExpertSeverity::Note  => ("·", Style::default().fg(Color::Cyan)),
+        ExpertSeverity::Error => ("●", Style::default().fg(theme.status_error).bold()),
+        ExpertSeverity::Warn  => ("▲", Style::default().fg(theme.status_warn)),
+        ExpertSeverity::Note  => ("·", Style::default().fg(theme.status_info)),
         ExpertSeverity::Chat  => (" ", Style::default()),
     }
 }
 
-fn expert_row_style(severity: ExpertSeverity) -> Style {
+fn expert_row_style(severity: ExpertSeverity, theme: &crate::theme::Theme) -> Style {
     match severity {
-        ExpertSeverity::Error => Style::default().fg(Color::Red),
-        ExpertSeverity::Warn  => Style::default().fg(Color::Yellow),
+        ExpertSeverity::Error => Style::default().fg(theme.status_error),
+        ExpertSeverity::Warn  => Style::default().fg(theme.status_warn),
         _ => Style::default(),
     }
 }

@@ -25,7 +25,7 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
     render_header(f, app, chunks[0]);
     render_protocol_table(f, app, &stats, chunks[1]);
     render_handshake_histogram(f, app, chunks[2]);
-    render_summary(f, &stats, chunks[3]);
+    render_summary(f, app, &stats, chunks[3]);
     render_footer(f, app, chunks[4]);
 }
 
@@ -82,13 +82,15 @@ fn bar_visual(pct: f64) -> String {
 }
 
 fn render_protocol_table(f: &mut Frame, app: &App, stats: &Stats, area: Rect) {
+    let t = &app.theme;
+
     let header = Row::new(vec![
-        Cell::from("Protocol").style(Style::default().fg(Color::Cyan).bold()),
-        Cell::from("Packets").style(Style::default().fg(Color::Cyan).bold()),
-        Cell::from("% Packets").style(Style::default().fg(Color::Cyan).bold()),
-        Cell::from("Bytes").style(Style::default().fg(Color::Cyan).bold()),
-        Cell::from("% Bytes").style(Style::default().fg(Color::Cyan).bold()),
-        Cell::from("Distribution").style(Style::default().fg(Color::Cyan).bold()),
+        Cell::from("Protocol").style(Style::default().fg(t.brand).bold()),
+        Cell::from("Packets").style(Style::default().fg(t.brand).bold()),
+        Cell::from("% Packets").style(Style::default().fg(t.brand).bold()),
+        Cell::from("Bytes").style(Style::default().fg(t.brand).bold()),
+        Cell::from("% Bytes").style(Style::default().fg(t.brand).bold()),
+        Cell::from("Distribution").style(Style::default().fg(t.brand).bold()),
     ])
     .height(1);
 
@@ -113,7 +115,7 @@ fn render_protocol_table(f: &mut Frame, app: &App, stats: &Stats, area: Rect) {
                 0.0
             };
 
-            let proto_style = protocol_color(&ps.protocol);
+            let proto_style = protocol_color(&app.theme, &ps.protocol);
 
             Row::new(vec![
                 Cell::from(ps.protocol.clone()).style(proto_style),
@@ -142,34 +144,37 @@ fn render_protocol_table(f: &mut Frame, app: &App, stats: &Stats, area: Rect) {
         Block::default()
             .title(format!(" Protocol Hierarchy ({total}) "))
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::DarkGray)),
+            .border_style(Style::default().fg(t.border)),
     );
 
     f.render_widget(table, area);
 }
 
-fn render_summary(f: &mut Frame, stats: &Stats, area: Rect) {
+fn render_summary(f: &mut Frame, app: &App, stats: &Stats, area: Rect) {
+    let t = &app.theme;
+
     let summary = Paragraph::new(Line::from(vec![
-        Span::styled(" Packets: ", Style::default().fg(Color::Cyan).bold()),
+        Span::styled(" Packets: ", Style::default().fg(t.brand).bold()),
         Span::raw(format!("{}", stats.total_packets)),
         Span::raw("  │  "),
-        Span::styled("Bytes: ", Style::default().fg(Color::Cyan).bold()),
+        Span::styled("Bytes: ", Style::default().fg(t.brand).bold()),
         Span::raw(widgets::format_bytes_total(stats.total_bytes)),
         Span::raw("  │  "),
-        Span::styled("Protocols: ", Style::default().fg(Color::Cyan).bold()),
+        Span::styled("Protocols: ", Style::default().fg(t.brand).bold()),
         Span::raw(format!("{}", stats.protocols.len())),
     ]))
     .block(
         Block::default()
             .title(" Summary ")
-            .title_style(Style::default().fg(Color::Cyan))
+            .title_style(Style::default().fg(t.brand))
             .borders(Borders::LEFT)
-            .border_style(Style::default().fg(Color::Cyan)),
+            .border_style(Style::default().fg(t.brand)),
     );
     f.render_widget(summary, area);
 }
 
 fn render_handshake_histogram(f: &mut Frame, app: &App, area: Rect) {
+    let t = &app.theme;
     let streams = app.packet_collector.get_all_streams();
 
     // Collect completed handshake times
@@ -184,12 +189,12 @@ fn render_handshake_histogram(f: &mut Frame, app: &App, area: Rect) {
 
     if total == 0 {
         let empty = Paragraph::new(" No completed TCP handshakes yet")
-            .style(Style::default().fg(Color::DarkGray))
+            .style(Style::default().fg(t.text_muted))
             .block(
                 Block::default()
                     .title(" Handshake Latency ")
                     .borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::DarkGray)),
+                    .border_style(Style::default().fg(t.border)),
             );
         f.render_widget(empty, area);
         return;
@@ -228,7 +233,7 @@ fn render_handshake_histogram(f: &mut Frame, app: &App, area: Rect) {
             " Handshake Latency ({total} connections) — min:{min:.1}ms  avg:{avg:.1}ms  med:{median:.1}ms  p95:{p95:.1}ms  max:{max_val:.1}ms "
         ))
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::DarkGray));
+        .border_style(Style::default().fg(t.border));
     let inner = block.inner(area);
     f.render_widget(block, area);
 
@@ -246,21 +251,21 @@ fn render_handshake_histogram(f: &mut Frame, app: &App, area: Rect) {
             };
 
             let color = if label.starts_with('<') || label.starts_with("1-") {
-                Color::Green
+                t.status_good
             } else if label.starts_with("5-") || label.starts_with("10") {
-                Color::Yellow
+                t.status_warn
             } else if label.starts_with("50") {
                 Color::Rgb(255, 165, 0)
             } else {
-                Color::Red
+                t.status_error
             };
 
             Line::from(vec![
-                Span::styled(format!(" {:>8} ", label), Style::default().fg(Color::White)),
+                Span::styled(format!(" {:>8} ", label), Style::default().fg(t.text_primary)),
                 Span::styled("█".repeat(bar_len), Style::default().fg(color)),
                 Span::styled(
                     if count > 0 { format!(" {} ({:.0}%)", count, pct) } else { String::new() },
-                    Style::default().fg(Color::DarkGray),
+                    Style::default().fg(t.text_muted),
                 ),
             ])
         })
@@ -270,25 +275,27 @@ fn render_handshake_histogram(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(content, inner);
 }
 
-fn render_footer(f: &mut Frame, _app: &App, area: Rect) {
+fn render_footer(f: &mut Frame, app: &App, area: Rect) {
+    let t = &app.theme;
+
     let hints = vec![
-        Span::styled("a", Style::default().fg(Color::Yellow).bold()),
+        Span::styled("a", Style::default().fg(t.key_hint).bold()),
         Span::raw(":Analyze  "),
-        Span::styled("p", Style::default().fg(Color::Yellow).bold()),
+        Span::styled("p", Style::default().fg(t.key_hint).bold()),
         Span::raw(":Pause  "),
-        Span::styled("r", Style::default().fg(Color::Yellow).bold()),
+        Span::styled("r", Style::default().fg(t.key_hint).bold()),
         Span::raw(":Refresh"),
     ];
-    widgets::render_footer(f, area, hints);
+    widgets::render_footer(f, app, area, hints);
 }
 
-fn protocol_color(proto: &str) -> Style {
+fn protocol_color(theme: &crate::theme::Theme, proto: &str) -> Style {
     match proto {
         "TCP" => Style::default().fg(Color::Magenta),
         "UDP" => Style::default().fg(Color::Blue),
-        "ICMP" | "ICMPv6" => Style::default().fg(Color::Yellow),
-        "ARP" => Style::default().fg(Color::Cyan),
-        "DNS" => Style::default().fg(Color::Green),
-        _ => Style::default().fg(Color::White),
+        "ICMP" | "ICMPv6" => Style::default().fg(theme.status_warn),
+        "ARP" => Style::default().fg(theme.brand),
+        "DNS" => Style::default().fg(theme.status_good),
+        _ => Style::default().fg(theme.text_primary),
     }
 }

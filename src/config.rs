@@ -41,6 +41,9 @@ pub struct NetwatchConfig {
 
     /// AI insights model name (for Ollama / local LLM)
     pub insights_model: String,
+
+    /// Color theme (dark, light, solarized, dracula, nord)
+    pub theme: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -72,6 +75,7 @@ impl Default for NetwatchConfig {
             geoip_asn_db: String::new(),
             alerts: AlertConfig::default(),
             insights_model: "minimax-m2.5:cloud".into(),
+            theme: "dark".into(),
         }
     }
 }
@@ -197,6 +201,7 @@ show_geo = false
                 port_scan_window_secs: 60,
             },
             insights_model: "llama3:8b".into(),
+            theme: "dark".into(),
         };
         let serialized = toml::to_string_pretty(&cfg).unwrap();
         let deserialized: NetwatchConfig = toml::from_str(&serialized).unwrap();

@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use crate::app::App;
 use crate::collectors::traceroute::TracerouteStatus;
+use crate::theme::Theme;
 use crate::ui::widgets;
 use ratatui::{
     prelude::*,
@@ -98,18 +99,19 @@ fn build_remote_nodes(app: &App) -> Vec<RemoteNode> {
 }
 
 fn render_topology(f: &mut Frame, app: &App, area: Rect) {
+    let t = &app.theme;
     let block = Block::default()
         .title(" Network Topology ")
-        .title_style(Style::default().fg(Color::Cyan))
+        .title_style(Style::default().fg(t.brand))
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(Color::DarkGray));
+        .border_style(Style::default().fg(t.border));
     let inner = block.inner(area);
     f.render_widget(block, area);
 
     if inner.height < 5 || inner.width < 40 {
         let msg = Paragraph::new(" Terminal too small for topology view")
-            .style(Style::default().fg(Color::DarkGray));
+            .style(Style::default().fg(t.text_muted));
         f.render_widget(msg, inner);
         return;
     }
@@ -164,7 +166,7 @@ fn render_topology(f: &mut Frame, app: &App, area: Rect) {
     let hs = app.health_prober.status.lock().unwrap();
 
     if let Some(ref gw) = app.config_collector.config.gateway {
-        let (dot, style) = health_indicator(hs.gateway_rtt_ms, hs.gateway_loss_pct);
+        let (dot, style) = health_indicator(hs.gateway_rtt_ms, hs.gateway_loss_pct, t);
         let rtt_str = hs.gateway_rtt_ms
             .map(|r| format!("{:.1}ms", r))
             .unwrap_or_else(|| "—".to_string());
@@ -178,9 +180,9 @@ fn render_topology(f: &mut Frame, app: &App, area: Rect) {
     for dns in &app.config_collector.config.dns_servers {
         // Use DNS health for first DNS server, Unknown for others
         let (dot, style) = if Some(dns) == app.config_collector.config.dns_servers.first() {
-            health_indicator(hs.dns_rtt_ms, hs.dns_loss_pct)
+            health_indicator(hs.dns_rtt_ms, hs.dns_loss_pct, t)
         } else {
-            ("○".to_string(), Style::default().fg(Color::DarkGray))
+            ("○".to_string(), Style::default().fg(t.text_muted))
         };
         let rtt_str = if Some(dns) == app.config_collector.config.dns_servers.first() {
             hs.dns_rtt_ms
@@ -211,17 +213,17 @@ fn render_topology(f: &mut Frame, app: &App, area: Rect) {
     let center_rect = Rect::new(center_x, center_y, center_width, center_height);
     // Re-render center node with adjusted height
     let center_node = Paragraph::new(vec![
-        Line::from(Span::styled(format!(" {} ", hostname), Style::default().fg(Color::Cyan).bold())),
+        Line::from(Span::styled(format!(" {} ", hostname), Style::default().fg(t.brand).bold())),
         Line::from(Span::raw(format!(" {} ", primary_ip))),
-        Line::from(Span::styled(format!(" {} ", iface_str), Style::default().fg(Color::DarkGray))),
-        Line::from(Span::styled(format!(" ↓{} ", widgets::format_bytes_rate(total_rx)), Style::default().fg(Color::Green))),
-        Line::from(Span::styled(format!(" ↑{} ", widgets::format_bytes_rate(total_tx)), Style::default().fg(Color::Blue))),
+        Line::from(Span::styled(format!(" {} ", iface_str), Style::default().fg(t.text_muted))),
+        Line::from(Span::styled(format!(" ↓{} ", widgets::format_bytes_rate(total_rx)), Style::default().fg(t.rx_rate))),
+        Line::from(Span::styled(format!(" ↑{} ", widgets::format_bytes_rate(total_tx)), Style::default().fg(t.tx_rate))),
     ])
     .block(
         Block::default()
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded)
-            .border_style(Style::default().fg(Color::Cyan)),
+            .border_style(Style::default().fg(t.brand)),
     );
     f.render_widget(center_node, center_rect);
 
@@ -275,17 +277,17 @@ fn render_topology(f: &mut Frame, app: &App, area: Rect) {
     if right_total_height > center_height {
         let center_rect = Rect::new(center_x, center_y, center_width, right_total_height);
         let center_node = Paragraph::new(vec![
-            Line::from(Span::styled(format!(" {} ", hostname), Style::default().fg(Color::Cyan).bold())),
+            Line::from(Span::styled(format!(" {} ", hostname), Style::default().fg(t.brand).bold())),
             Line::from(Span::raw(format!(" {} ", primary_ip))),
-            Line::from(Span::styled(format!(" {} ", iface_str), Style::default().fg(Color::DarkGray))),
-            Line::from(Span::styled(format!(" ↓{} ", widgets::format_bytes_rate(total_rx)), Style::default().fg(Color::Green))),
-            Line::from(Span::styled(format!(" ↑{} ", widgets::format_bytes_rate(total_tx)), Style::default().fg(Color::Blue))),
+            Line::from(Span::styled(format!(" {} ", iface_str), Style::default().fg(t.text_muted))),
+            Line::from(Span::styled(format!(" ↓{} ", widgets::format_bytes_rate(total_rx)), Style::default().fg(t.rx_rate))),
+            Line::from(Span::styled(format!(" ↑{} ", widgets::format_bytes_rate(total_tx)), Style::default().fg(t.tx_rate))),
         ])
         .block(
             Block::default()
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded)
-                .border_style(Style::default().fg(Color::Cyan)),
+                .border_style(Style::default().fg(t.brand)),
         );
         f.render_widget(center_node, center_rect);
     }
@@ -300,11 +302,11 @@ fn render_topology(f: &mut Frame, app: &App, area: Rect) {
 
         let is_selected = i + scroll == app.topology_scroll;
         let border_style = if is_selected {
-            Style::default().fg(Color::Yellow)
+            Style::default().fg(t.active_tab)
         } else if remote.has_established {
-            Style::default().fg(Color::Green)
+            Style::default().fg(t.status_good)
         } else {
-            Style::default().fg(Color::DarkGray)
+            Style::default().fg(t.text_muted)
         };
 
         let proc_str = if remote.processes.is_empty() {
@@ -318,18 +320,18 @@ fn render_topology(f: &mut Frame, app: &App, area: Rect) {
         let mut lines = vec![
             Line::from(Span::styled(
                 format!("{} {} ", ip_prefix, remote.ip),
-                if is_selected { Style::default().fg(Color::Yellow).bold() } else { Style::default() },
+                if is_selected { Style::default().fg(t.active_tab).bold() } else { Style::default() },
             )),
             Line::from(Span::styled(
                 format!(" {}× {} ", remote.conn_count, proc_str),
-                Style::default().fg(Color::DarkGray),
+                Style::default().fg(t.text_muted),
             )),
         ];
         if let Some(ref geo) = remote.geo_label {
             let truncated: String = geo.chars().take((right_width.saturating_sub(3)) as usize).collect();
             lines.push(Line::from(Span::styled(
                 format!(" {} ", truncated),
-                Style::default().fg(Color::DarkGray),
+                Style::default().fg(t.text_muted),
             )));
         }
 
@@ -348,9 +350,9 @@ fn render_topology(f: &mut Frame, app: &App, area: Rect) {
         let edge_y = right_y + node_h / 2;
         if edge_y >= inner.y && edge_y < inner.y + inner.height {
             let edge_style = if remote.has_established {
-                Style::default().fg(Color::Green)
+                Style::default().fg(t.status_good)
             } else {
-                Style::default().fg(Color::DarkGray)
+                Style::default().fg(t.text_muted)
             };
             let edge_label = format!("─▶{}×", remote.conn_count);
             let edge = Paragraph::new(Line::from(
@@ -365,6 +367,7 @@ fn render_topology(f: &mut Frame, app: &App, area: Rect) {
 }
 
 fn render_summary(f: &mut Frame, app: &App, area: Rect) {
+    let t = &app.theme;
     let conns = app.connection_collector.connections.lock().unwrap();
     let total_conns = conns.len();
     let mut unique_remotes = std::collections::HashSet::new();
@@ -380,58 +383,60 @@ fn render_summary(f: &mut Frame, app: &App, area: Rect) {
     let node_count = 1 + infra_count + unique_remotes.len(); // 1 for local
 
     let summary = Paragraph::new(Line::from(vec![
-        Span::styled(" Nodes: ", Style::default().fg(Color::Cyan).bold()),
+        Span::styled(" Nodes: ", Style::default().fg(t.brand).bold()),
         Span::raw(format!("{}", node_count)),
         Span::raw("  │  "),
-        Span::styled("Connections: ", Style::default().fg(Color::Cyan).bold()),
+        Span::styled("Connections: ", Style::default().fg(t.brand).bold()),
         Span::raw(format!("{}", total_conns)),
         Span::raw("  │  "),
-        Span::styled("Remotes: ", Style::default().fg(Color::Cyan).bold()),
+        Span::styled("Remotes: ", Style::default().fg(t.brand).bold()),
         Span::raw(format!("{}", unique_remotes.len())),
     ]))
     .block(
         Block::default()
             .borders(Borders::LEFT)
-            .border_style(Style::default().fg(Color::Cyan)),
+            .border_style(Style::default().fg(t.brand)),
     );
     f.render_widget(summary, area);
 }
 
 fn render_footer(f: &mut Frame, app: &App, area: Rect) {
+    let t = &app.theme;
     let hints = if app.traceroute_view_open {
         vec![
-            Span::styled("Esc", Style::default().fg(Color::Yellow).bold()),
+            Span::styled("Esc", Style::default().fg(t.key_hint).bold()),
             Span::raw(":Close  "),
         ]
     } else {
         vec![
-            Span::styled("T", Style::default().fg(Color::Yellow).bold()),
+            Span::styled("T", Style::default().fg(t.key_hint).bold()),
             Span::raw(":Traceroute  "),
-            Span::styled("Enter", Style::default().fg(Color::Yellow).bold()),
+            Span::styled("Enter", Style::default().fg(t.key_hint).bold()),
             Span::raw(":→Connections"),
         ]
     };
-    widgets::render_footer(f, area, hints);
+    widgets::render_footer(f, app, area, hints);
 }
 
-fn health_indicator(rtt: Option<f64>, loss: f64) -> (String, Style) {
+fn health_indicator(rtt: Option<f64>, loss: f64, theme: &Theme) -> (String, Style) {
     match rtt {
         Some(r) if loss == 0.0 && r < 10.0 => {
-            ("●".to_string(), Style::default().fg(Color::Green))
+            ("●".to_string(), Style::default().fg(theme.status_good))
         }
         Some(r) if loss < 50.0 && r < 100.0 => {
-            ("●".to_string(), Style::default().fg(Color::Yellow))
+            ("●".to_string(), Style::default().fg(theme.status_warn))
         }
         Some(_) => {
-            ("●".to_string(), Style::default().fg(Color::Red))
+            ("●".to_string(), Style::default().fg(theme.status_error))
         }
         None => {
-            ("○".to_string(), Style::default().fg(Color::DarkGray))
+            ("○".to_string(), Style::default().fg(theme.text_muted))
         }
     }
 }
 
 fn render_traceroute_overlay(f: &mut Frame, app: &App, area: Rect) {
+    let t = &app.theme;
     let result = app.traceroute_runner.result.lock().unwrap();
 
     // Centre overlay occupying ~70% of the screen
@@ -445,10 +450,10 @@ fn render_traceroute_overlay(f: &mut Frame, app: &App, area: Rect) {
 
     let title = format!(" Traceroute → {} ", result.target);
     let border_color = match result.status {
-        TracerouteStatus::Running => Color::Yellow,
-        TracerouteStatus::Done => Color::Cyan,
-        TracerouteStatus::Error(_) => Color::Red,
-        TracerouteStatus::Idle => Color::DarkGray,
+        TracerouteStatus::Running => t.status_warn,
+        TracerouteStatus::Done => t.brand,
+        TracerouteStatus::Error(_) => t.status_error,
+        TracerouteStatus::Idle => t.text_muted,
     };
     let block = Block::default()
         .title(title)
@@ -463,52 +468,52 @@ fn render_traceroute_overlay(f: &mut Frame, app: &App, area: Rect) {
         TracerouteStatus::Running => {
             lines.push(Line::from(Span::styled(
                 " ⏳ Running traceroute...",
-                Style::default().fg(Color::Yellow),
+                Style::default().fg(t.status_warn),
             )));
             // Show hops collected so far
             for hop in &result.hops {
-                lines.push(format_hop_line(hop));
+                lines.push(format_hop_line(hop, t));
             }
         }
         TracerouteStatus::Error(msg) => {
             lines.push(Line::from(Span::styled(
                 format!(" ✗ Error: {}", msg),
-                Style::default().fg(Color::Red),
+                Style::default().fg(t.status_error),
             )));
         }
         TracerouteStatus::Done => {
             // Header
             lines.push(Line::from(vec![
-                Span::styled(" Hop", Style::default().fg(Color::Cyan).bold()),
+                Span::styled(" Hop", Style::default().fg(t.brand).bold()),
                 Span::raw("  "),
                 Span::styled(
                     format!("{:<40}", "Host / IP"),
-                    Style::default().fg(Color::Cyan).bold(),
+                    Style::default().fg(t.brand).bold(),
                 ),
-                Span::styled("RTT 1     ", Style::default().fg(Color::Cyan).bold()),
-                Span::styled("RTT 2     ", Style::default().fg(Color::Cyan).bold()),
-                Span::styled("RTT 3", Style::default().fg(Color::Cyan).bold()),
+                Span::styled("RTT 1     ", Style::default().fg(t.brand).bold()),
+                Span::styled("RTT 2     ", Style::default().fg(t.brand).bold()),
+                Span::styled("RTT 3", Style::default().fg(t.brand).bold()),
             ]));
             lines.push(Line::from(Span::styled(
                 " ───────────────────────────────────────────────────────────────────",
-                Style::default().fg(Color::DarkGray),
+                Style::default().fg(t.text_muted),
             )));
 
             for hop in &result.hops {
-                lines.push(format_hop_line(hop));
+                lines.push(format_hop_line(hop, t));
             }
 
             if result.hops.is_empty() {
                 lines.push(Line::from(Span::styled(
                     " No hops received",
-                    Style::default().fg(Color::DarkGray),
+                    Style::default().fg(t.text_muted),
                 )));
             }
         }
         TracerouteStatus::Idle => {
             lines.push(Line::from(Span::styled(
                 " No traceroute data",
-                Style::default().fg(Color::DarkGray),
+                Style::default().fg(t.text_muted),
             )));
         }
     }
@@ -522,7 +527,7 @@ fn render_traceroute_overlay(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(content, inner);
 }
 
-fn format_hop_line(hop: &crate::collectors::traceroute::TracerouteHop) -> Line<'static> {
+fn format_hop_line(hop: &crate::collectors::traceroute::TracerouteHop, theme: &Theme) -> Line<'static> {
     let hop_num = format!(" {:>2} ", hop.hop_number);
     let host_ip = match (&hop.host, &hop.ip) {
         (Some(h), Some(ip)) => format!("{} ({})", h, ip),
@@ -544,20 +549,20 @@ fn format_hop_line(hop: &crate::collectors::traceroute::TracerouteHop) -> Line<'
 
     let rtt_color = hop.rtt_ms.iter().filter_map(|r| r.as_ref()).next().map(|ms| {
         if *ms < 10.0 {
-            Color::Green
+            theme.status_good
         } else if *ms < 50.0 {
-            Color::Yellow
+            theme.status_warn
         } else if *ms < 100.0 {
             Color::Rgb(255, 165, 0) // orange
         } else {
-            Color::Red
+            theme.status_error
         }
-    }).unwrap_or(Color::DarkGray);
+    }).unwrap_or(theme.text_muted);
 
     Line::from(vec![
-        Span::styled(hop_num, Style::default().fg(Color::Cyan)),
+        Span::styled(hop_num, Style::default().fg(theme.brand)),
         Span::raw("  "),
-        Span::styled(format!("{:<40}", host_ip), Style::default().fg(if hop.ip.is_some() { Color::White } else { Color::DarkGray })),
+        Span::styled(format!("{:<40}", host_ip), Style::default().fg(if hop.ip.is_some() { theme.text_primary } else { theme.text_muted })),
         Span::styled(rtt_spans[0].clone(), Style::default().fg(rtt_color)),
         Span::raw(" "),
         Span::styled(rtt_spans[1].clone(), Style::default().fg(rtt_color)),

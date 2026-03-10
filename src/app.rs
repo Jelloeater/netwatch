@@ -10,6 +10,7 @@ use crate::collectors::packets::PacketCollector;
 use crate::collectors::traffic::TrafficCollector;
 use crate::config::NetwatchConfig;
 use crate::ebpf::EbpfStatus;
+use crate::theme::Theme;
 use crate::event::{AppEvent, EventHandler};
 use crate::platform::{self, InterfaceInfo};
 use crate::ui;
@@ -141,6 +142,13 @@ pub struct App {
     /// Per-remote-IP RTT history for sparklines (keyed by remote IP string)
     pub rtt_history: HashMap<String, VecDeque<f64>>,
     rtt_sampled_streams: HashSet<u32>,
+    pub theme: Theme,
+    pub show_settings: bool,
+    pub settings_cursor: usize,
+    pub settings_editing: bool,
+    pub settings_edit_buf: String,
+    pub settings_status: Option<String>,
+    settings_status_tick: u32,
 }
 
 impl App {
@@ -163,6 +171,8 @@ impl App {
         } else {
             Some(user_config.bpf_filter.clone())
         };
+
+        let theme = crate::theme::by_name(&user_config.theme);
 
         let mut network_intel = NetworkIntelCollector::new();
         network_intel.set_bandwidth_threshold(user_config.alerts.bandwidth_threshold);
@@ -226,6 +236,13 @@ impl App {
             last_area: Rect::default(),
             rtt_history: HashMap::new(),
             rtt_sampled_streams: HashSet::new(),
+            theme,
+            show_settings: false,
+            settings_cursor: 0,
+            settings_editing: false,
+            settings_edit_buf: String::new(),
+            settings_status: None,
+            settings_status_tick: 0,
         }
     }
 
@@ -278,6 +295,14 @@ impl App {
             if self.export_status_tick >= 5 {
                 self.export_status = None;
                 self.export_status_tick = 0;
+            }
+        }
+
+        if self.settings_status.is_some() {
+            self.settings_status_tick += 1;
+            if self.settings_status_tick >= 5 {
+                self.settings_status = None;
+                self.settings_status_tick = 0;
             }
         }
 
@@ -529,6 +554,9 @@ pub async fn run<B: Backend>(terminal: &mut Terminal<B>) -> Result<()> {
             if app.show_help {
                 ui::help::render(f, &app, area);
             }
+            if app.show_settings {
+                ui::settings::render(f, &app, area);
+            }
         })?;
 
         match events.next().await? {
@@ -551,6 +579,81 @@ pub async fn run<B: Backend>(terminal: &mut Terminal<B>) -> Result<()> {
                             return Ok(());
                         }
                         _ => {}
+                    }
+                    continue;
+                }
+                // Settings overlay — intercept keys
+                if app.show_settings {
+                    if app.settings_editing {
+                        match key.code {
+                            KeyCode::Enter => {
+                                let value = app.settings_edit_buf.clone();
+                                let cursor = app.settings_cursor;
+                                match ui::settings::apply_edit(&mut app.user_config, cursor, &value) {
+                                    Ok(()) => {
+                                        // Apply live state changes
+                                        app.show_geo = app.user_config.show_geo;
+                                        app.packet_follow = app.user_config.packet_follow;
+                                        app.timeline_window = app.user_config.timeline_window_enum();
+                                        app.theme = crate::theme::by_name(&app.user_config.theme);
+                                        app.settings_status = Some("✓ Applied".into());
+                                        app.settings_status_tick = 0;
+                                    }
+                                    Err(msg) => {
+                                        app.settings_status = Some(format!("✗ {}", msg));
+                                        app.settings_status_tick = 0;
+                                    }
+                                }
+                                app.settings_editing = false;
+                            }
+                            KeyCode::Esc => {
+                                app.settings_editing = false;
+                            }
+                            KeyCode::Backspace => { app.settings_edit_buf.pop(); }
+                            KeyCode::Char(c) => { app.settings_edit_buf.push(c); }
+                            _ => {}
+                        }
+                    } else {
+                        match key.code {
+                            KeyCode::Esc => {
+                                app.show_settings = false;
+                            }
+                            KeyCode::Char('q') => {
+                                app.packet_collector.stop_capture();
+                                return Ok(());
+                            }
+                            KeyCode::Up => {
+                                app.settings_cursor = app.settings_cursor.saturating_sub(1);
+                            }
+                            KeyCode::Down => {
+                                if app.settings_cursor + 1 < ui::settings::SETTINGS_COUNT {
+                                    app.settings_cursor += 1;
+                                }
+                            }
+                            KeyCode::Enter => {
+                                app.settings_editing = true;
+                                app.settings_edit_buf = ui::settings::get_edit_value(
+                                    &app.user_config,
+                                    app.settings_cursor,
+                                );
+                            }
+                            KeyCode::Char('S') => {
+                                match app.user_config.save() {
+                                    Ok(()) => {
+                                        let path = NetwatchConfig::path()
+                                            .map(|p| p.display().to_string())
+                                            .unwrap_or_default();
+                                        app.settings_status = Some(format!("✓ Saved to {}", path));
+                                        app.settings_status_tick = 0;
+                                    }
+                                    Err(e) => {
+                                        app.settings_status = Some(format!("✗ Save failed: {}", e));
+                                        app.settings_status_tick = 0;
+                                    }
+                                }
+                            }
+                            _ => {}
+                        }
                     }
                     continue;
                 }
@@ -613,6 +716,10 @@ pub async fn run<B: Backend>(terminal: &mut Terminal<B>) -> Result<()> {
                     app.submit_insights_snapshot();
                 }
                 KeyCode::Char('g') => app.show_geo = !app.show_geo,
+                KeyCode::Char(',') => {
+                    app.show_settings = !app.show_settings;
+                    app.settings_editing = false;
+                },
                 KeyCode::Char('p') => app.paused = !app.paused,
                 KeyCode::Char('r') => {
                     app.traffic.update();

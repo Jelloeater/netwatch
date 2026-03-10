@@ -28,7 +28,7 @@ fn render_header(f: &mut Frame, app: &App, area: Rect) {
     let count = app.connection_collector.connections.lock().unwrap().len();
     let extra = vec![
         Span::raw("  "),
-        Span::styled(format!("{count} connections"), Style::default().fg(Color::Green)),
+        Span::styled(format!("{count} connections"), Style::default().fg(app.theme.status_good)),
     ];
     crate::ui::widgets::render_header_with_extra(f, app, area, extra);
 }
@@ -44,34 +44,34 @@ fn render_connection_table(f: &mut Frame, app: &App, area: Rect) {
 
     let mut header_cells = vec![
         Cell::from(format!("Process{}", sort_indicator(0)))
-            .style(Style::default().fg(Color::Cyan).bold()),
+            .style(Style::default().fg(app.theme.brand).bold()),
         Cell::from(format!("PID{}", sort_indicator(1)))
-            .style(Style::default().fg(Color::Cyan).bold()),
+            .style(Style::default().fg(app.theme.brand).bold()),
         Cell::from(format!("Proto{}", sort_indicator(2)))
-            .style(Style::default().fg(Color::Cyan).bold()),
+            .style(Style::default().fg(app.theme.brand).bold()),
         Cell::from(format!("State{}", sort_indicator(3)))
-            .style(Style::default().fg(Color::Cyan).bold()),
+            .style(Style::default().fg(app.theme.brand).bold()),
         Cell::from(format!("Local Address{}", sort_indicator(4)))
-            .style(Style::default().fg(Color::Cyan).bold()),
+            .style(Style::default().fg(app.theme.brand).bold()),
         Cell::from(format!("Remote Address{}", sort_indicator(5)))
-            .style(Style::default().fg(Color::Cyan).bold()),
+            .style(Style::default().fg(app.theme.brand).bold()),
     ];
     if has_rtt_data {
         header_cells.push(
             Cell::from("RTT")
-                .style(Style::default().fg(Color::Cyan).bold()),
+                .style(Style::default().fg(app.theme.brand).bold()),
         );
     }
     if has_sparkline_data {
         header_cells.push(
             Cell::from("RTT Trend")
-                .style(Style::default().fg(Color::Cyan).bold()),
+                .style(Style::default().fg(app.theme.brand).bold()),
         );
     }
     if app.show_geo {
         header_cells.push(
             Cell::from("Location")
-                .style(Style::default().fg(Color::Cyan).bold()),
+                .style(Style::default().fg(app.theme.brand).bold()),
         );
     }
     let header = Row::new(header_cells).height(1);
@@ -100,14 +100,14 @@ fn render_connection_table(f: &mut Frame, app: &App, area: Rect) {
         .enumerate()
         .map(|(i, conn)| {
             let state_style = match conn.state.as_str() {
-                "ESTABLISHED" => Style::default().fg(Color::Green),
-                "LISTEN" => Style::default().fg(Color::Yellow),
-                "CLOSE_WAIT" | "TIME_WAIT" => Style::default().fg(Color::Red),
-                _ => Style::default().fg(Color::DarkGray),
+                "ESTABLISHED" => Style::default().fg(app.theme.status_good),
+                "LISTEN" => Style::default().fg(app.theme.status_warn),
+                "CLOSE_WAIT" | "TIME_WAIT" => Style::default().fg(app.theme.status_error),
+                _ => Style::default().fg(app.theme.text_muted),
             };
 
             let row_style = if i + scroll == app.connection_scroll {
-                Style::default().bg(Color::Rgb(40, 40, 60))
+                Style::default().bg(app.theme.selection_bg)
             } else {
                 Style::default()
             };
@@ -128,17 +128,17 @@ fn render_connection_table(f: &mut Frame, app: &App, area: Rect) {
                 let (rtt_text, rtt_style) = match conn.kernel_rtt_us {
                     Some(rtt) if rtt > 100_000.0 => (
                         format!("{:.1}ms", rtt / 1000.0),
-                        Style::default().fg(Color::Red),
+                        Style::default().fg(app.theme.status_error),
                     ),
                     Some(rtt) if rtt > 10_000.0 => (
                         format!("{:.1}ms", rtt / 1000.0),
-                        Style::default().fg(Color::Yellow),
+                        Style::default().fg(app.theme.status_warn),
                     ),
                     Some(rtt) => (
                         format!("{:.1}ms", rtt / 1000.0),
-                        Style::default().fg(Color::Green),
+                        Style::default().fg(app.theme.status_good),
                     ),
-                    None => ("—".to_string(), Style::default().fg(Color::DarkGray)),
+                    None => ("—".to_string(), Style::default().fg(app.theme.text_muted)),
                 };
                 cells.push(Cell::from(rtt_text).style(rtt_style));
             }
@@ -150,10 +150,10 @@ fn render_connection_table(f: &mut Frame, app: &App, area: Rect) {
                     .map(|h| {
                         let latest = h.back().copied().unwrap_or(0.0);
                         let text = format!("{} {:.0}ms", rtt_sparkline(h), latest);
-                        let color = rtt_sparkline_color(h);
+                        let color = rtt_sparkline_color(h, &app.theme);
                         (text, Style::default().fg(color))
                     })
-                    .unwrap_or_else(|| ("—".to_string(), Style::default().fg(Color::DarkGray)));
+                    .unwrap_or_else(|| ("—".to_string(), Style::default().fg(app.theme.text_muted)));
                 cells.push(Cell::from(spark_text).style(spark_style));
             }
             if app.show_geo {
@@ -168,7 +168,7 @@ fn render_connection_table(f: &mut Frame, app: &App, area: Rect) {
                         }
                     })
                     .unwrap_or_default();
-                cells.push(Cell::from(geo_label).style(Style::default().fg(Color::DarkGray)));
+                cells.push(Cell::from(geo_label).style(Style::default().fg(app.theme.text_muted)));
             }
             Row::new(cells).style(row_style)
         })
@@ -201,7 +201,7 @@ fn render_connection_table(f: &mut Frame, app: &App, area: Rect) {
                 (scroll + visible_rows).min(conns.len())
             ))
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::DarkGray)),
+            .border_style(Style::default().fg(app.theme.border)),
     );
 
     f.render_widget(table, area);
@@ -210,22 +210,22 @@ fn render_connection_table(f: &mut Frame, app: &App, area: Rect) {
 fn render_footer(f: &mut Frame, app: &App, area: Rect) {
     let hints = if app.traceroute_view_open {
         vec![
-            Span::styled("Esc", Style::default().fg(Color::Yellow).bold()),
+            Span::styled("Esc", Style::default().fg(app.theme.key_hint).bold()),
             Span::raw(":Close  "),
-            Span::styled("q", Style::default().fg(Color::Yellow).bold()),
+            Span::styled("q", Style::default().fg(app.theme.key_hint).bold()),
             Span::raw(":Quit"),
         ]
     } else {
         vec![
-            Span::styled("s", Style::default().fg(Color::Yellow).bold()),
+            Span::styled("s", Style::default().fg(app.theme.key_hint).bold()),
             Span::raw(":Sort  "),
-            Span::styled("T", Style::default().fg(Color::Yellow).bold()),
+            Span::styled("T", Style::default().fg(app.theme.key_hint).bold()),
             Span::raw(":Traceroute  "),
-            Span::styled("Enter", Style::default().fg(Color::Yellow).bold()),
+            Span::styled("Enter", Style::default().fg(app.theme.key_hint).bold()),
             Span::raw(":→Packets"),
         ]
     };
-    crate::ui::widgets::render_footer(f, area, hints);
+    crate::ui::widgets::render_footer(f, app, area, hints);
 }
 
 fn render_traceroute_overlay(f: &mut Frame, app: &App, area: Rect) {
@@ -241,10 +241,10 @@ fn render_traceroute_overlay(f: &mut Frame, app: &App, area: Rect) {
 
     let title = format!(" Traceroute → {} ", result.target);
     let border_color = match result.status {
-        TracerouteStatus::Running => Color::Yellow,
-        TracerouteStatus::Done => Color::Cyan,
-        TracerouteStatus::Error(_) => Color::Red,
-        TracerouteStatus::Idle => Color::DarkGray,
+        TracerouteStatus::Running => app.theme.status_warn,
+        TracerouteStatus::Done => app.theme.brand,
+        TracerouteStatus::Error(_) => app.theme.status_error,
+        TracerouteStatus::Idle => app.theme.text_muted,
     };
     let block = Block::default()
         .title(title)
@@ -259,45 +259,45 @@ fn render_traceroute_overlay(f: &mut Frame, app: &App, area: Rect) {
         TracerouteStatus::Running => {
             lines.push(Line::from(Span::styled(
                 " ⏳ Running traceroute...",
-                Style::default().fg(Color::Yellow),
+                Style::default().fg(app.theme.status_warn),
             )));
         }
         TracerouteStatus::Error(msg) => {
             lines.push(Line::from(Span::styled(
                 format!(" ✗ Error: {}", msg),
-                Style::default().fg(Color::Red),
+                Style::default().fg(app.theme.status_error),
             )));
         }
         TracerouteStatus::Done => {
             lines.push(Line::from(vec![
-                Span::styled(" Hop", Style::default().fg(Color::Cyan).bold()),
+                Span::styled(" Hop", Style::default().fg(app.theme.brand).bold()),
                 Span::raw("  "),
                 Span::styled(
                     format!("{:<40}", "Host / IP"),
-                    Style::default().fg(Color::Cyan).bold(),
+                    Style::default().fg(app.theme.brand).bold(),
                 ),
-                Span::styled("RTT 1     ", Style::default().fg(Color::Cyan).bold()),
-                Span::styled("RTT 2     ", Style::default().fg(Color::Cyan).bold()),
-                Span::styled("RTT 3", Style::default().fg(Color::Cyan).bold()),
+                Span::styled("RTT 1     ", Style::default().fg(app.theme.brand).bold()),
+                Span::styled("RTT 2     ", Style::default().fg(app.theme.brand).bold()),
+                Span::styled("RTT 3", Style::default().fg(app.theme.brand).bold()),
             ]));
             lines.push(Line::from(Span::styled(
                 " ───────────────────────────────────────────────────────────────────",
-                Style::default().fg(Color::DarkGray),
+                Style::default().fg(app.theme.text_muted),
             )));
             for hop in &result.hops {
-                lines.push(format_hop_line(hop));
+                lines.push(format_hop_line(hop, &app.theme));
             }
             if result.hops.is_empty() {
                 lines.push(Line::from(Span::styled(
                     " No hops received",
-                    Style::default().fg(Color::DarkGray),
+                    Style::default().fg(app.theme.text_muted),
                 )));
             }
         }
         TracerouteStatus::Idle => {
             lines.push(Line::from(Span::styled(
                 " No traceroute data",
-                Style::default().fg(Color::DarkGray),
+                Style::default().fg(app.theme.text_muted),
             )));
         }
     }
@@ -311,7 +311,7 @@ fn render_traceroute_overlay(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(content, inner);
 }
 
-fn format_hop_line(hop: &crate::collectors::traceroute::TracerouteHop) -> Line<'static> {
+fn format_hop_line(hop: &crate::collectors::traceroute::TracerouteHop, theme: &crate::theme::Theme) -> Line<'static> {
     let hop_num = format!(" {:>2} ", hop.hop_number);
     let host_ip = match (&hop.host, &hop.ip) {
         (Some(h), Some(ip)) => format!("{} ({})", h, ip),
@@ -333,20 +333,20 @@ fn format_hop_line(hop: &crate::collectors::traceroute::TracerouteHop) -> Line<'
 
     let rtt_color = hop.rtt_ms.iter().filter_map(|r| r.as_ref()).next().map(|ms| {
         if *ms < 10.0 {
-            Color::Green
+            theme.status_good
         } else if *ms < 50.0 {
-            Color::Yellow
+            theme.status_warn
         } else if *ms < 100.0 {
             Color::Rgb(255, 165, 0)
         } else {
-            Color::Red
+            theme.status_error
         }
-    }).unwrap_or(Color::DarkGray);
+    }).unwrap_or(theme.text_muted);
 
     Line::from(vec![
-        Span::styled(hop_num, Style::default().fg(Color::Cyan)),
+        Span::styled(hop_num, Style::default().fg(theme.brand)),
         Span::raw("  "),
-        Span::styled(format!("{:<40}", host_ip), Style::default().fg(if hop.ip.is_some() { Color::White } else { Color::DarkGray })),
+        Span::styled(format!("{:<40}", host_ip), Style::default().fg(if hop.ip.is_some() { theme.text_primary } else { theme.text_muted })),
         Span::styled(rtt_spans[0].clone(), Style::default().fg(rtt_color)),
         Span::raw(" "),
         Span::styled(rtt_spans[1].clone(), Style::default().fg(rtt_color)),
@@ -379,11 +379,11 @@ fn rtt_sparkline(history: &std::collections::VecDeque<f64>) -> String {
         .collect()
 }
 
-fn rtt_sparkline_color(history: &std::collections::VecDeque<f64>) -> Color {
+fn rtt_sparkline_color(history: &std::collections::VecDeque<f64>, theme: &crate::theme::Theme) -> Color {
     match history.back() {
-        Some(&rtt) if rtt > 100.0 => Color::Red,
-        Some(&rtt) if rtt > 50.0 => Color::Yellow,
-        _ => Color::Green,
+        Some(&rtt) if rtt > 100.0 => theme.status_error,
+        Some(&rtt) if rtt > 50.0 => theme.status_warn,
+        _ => theme.status_good,
     }
 }
 
@@ -438,19 +438,22 @@ mod tests {
     #[test]
     fn sparkline_color_green_low() {
         let h = VecDeque::from(vec![10.0, 15.0, 12.0]);
-        assert_eq!(rtt_sparkline_color(&h), Color::Green);
+        let theme = crate::theme::dark();
+        assert_eq!(rtt_sparkline_color(&h, &theme), theme.status_good);
     }
 
     #[test]
     fn sparkline_color_yellow_medium() {
         let h = VecDeque::from(vec![10.0, 60.0]);
-        assert_eq!(rtt_sparkline_color(&h), Color::Yellow);
+        let theme = crate::theme::dark();
+        assert_eq!(rtt_sparkline_color(&h, &theme), theme.status_warn);
     }
 
     #[test]
     fn sparkline_color_red_high() {
         let h = VecDeque::from(vec![10.0, 150.0]);
-        assert_eq!(rtt_sparkline_color(&h), Color::Red);
+        let theme = crate::theme::dark();
+        assert_eq!(rtt_sparkline_color(&h, &theme), theme.status_error);
     }
 
     #[test]

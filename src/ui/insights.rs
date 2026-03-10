@@ -34,23 +34,23 @@ fn render_status(f: &mut Frame, app: &App, area: Rect) {
     let (status_text, status_style) = match &status {
         InsightsStatus::Idle => (
             "Waiting for packet data...".to_string(),
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(app.theme.text_muted),
         ),
         InsightsStatus::Analyzing => (
             format!("🔄 Analyzing with {}...", model),
-            Style::default().fg(Color::Yellow),
+            Style::default().fg(app.theme.status_warn),
         ),
         InsightsStatus::Available => (
             format!("✓ AI analysis via {} (auto-refreshes every 15s)", model),
-            Style::default().fg(Color::Green),
+            Style::default().fg(app.theme.status_good),
         ),
         InsightsStatus::Error(e) => (
             format!("✗ Error: {}", e),
-            Style::default().fg(Color::Red),
+            Style::default().fg(app.theme.status_error),
         ),
         InsightsStatus::OllamaUnavailable => (
             "✗ Ollama not running — start with: ollama serve".to_string(),
-            Style::default().fg(Color::Red),
+            Style::default().fg(app.theme.status_error),
         ),
     };
 
@@ -61,7 +61,7 @@ fn render_status(f: &mut Frame, app: &App, area: Rect) {
         Block::default()
             .title(" AI Analysis ")
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::DarkGray)),
+            .border_style(Style::default().fg(app.theme.border)),
     );
     f.render_widget(status_bar, area);
 }
@@ -72,7 +72,7 @@ fn render_insights(f: &mut Frame, app: &App, area: Rect) {
     let block = Block::default()
         .title(format!(" Network Insights ({}) ", insights.len()))
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::DarkGray));
+        .border_style(Style::default().fg(app.theme.border));
     let inner = block.inner(area);
     f.render_widget(block, area);
 
@@ -83,41 +83,41 @@ fn render_insights(f: &mut Frame, app: &App, area: Rect) {
                 Line::from(""),
                 Line::from(Span::styled(
                     "  Ollama is not running. To enable AI insights:",
-                    Style::default().fg(Color::Yellow),
+                    Style::default().fg(app.theme.status_warn),
                 )),
                 Line::from(""),
                 Line::from(Span::styled(
                     "    1. Install Ollama: https://ollama.com",
-                    Style::default().fg(Color::White),
+                    Style::default().fg(app.theme.text_primary),
                 )),
                 Line::from(Span::styled(
                     "    2. Pull a model:   ollama pull llama3.2",
-                    Style::default().fg(Color::White),
+                    Style::default().fg(app.theme.text_primary),
                 )),
                 Line::from(Span::styled(
                     "    3. Start serving:  ollama serve",
-                    Style::default().fg(Color::White),
+                    Style::default().fg(app.theme.text_primary),
                 )),
                 Line::from(""),
                 Line::from(Span::styled(
                     "  NetWatch will auto-detect Ollama and begin analysis.",
-                    Style::default().fg(Color::DarkGray),
+                    Style::default().fg(app.theme.text_muted),
                 )),
             ],
             _ => vec![
                 Line::from(""),
                 Line::from(Span::styled(
                     "  Start capturing packets on tab [4] to enable AI analysis.",
-                    Style::default().fg(Color::DarkGray),
+                    Style::default().fg(app.theme.text_muted),
                 )),
                 Line::from(Span::styled(
                     "  Insights will appear here automatically every 15 seconds.",
-                    Style::default().fg(Color::DarkGray),
+                    Style::default().fg(app.theme.text_muted),
                 )),
                 Line::from(""),
                 Line::from(Span::styled(
                     "  Press 'a' to trigger analysis immediately.",
-                    Style::default().fg(Color::DarkGray),
+                    Style::default().fg(app.theme.text_muted),
                 )),
             ],
         };
@@ -134,11 +134,11 @@ fn render_insights(f: &mut Frame, app: &App, area: Rect) {
         lines.push(Line::from(vec![
             Span::styled(
                 format!("─── {} ", insight.timestamp),
-                Style::default().fg(Color::Cyan).bold(),
+                Style::default().fg(app.theme.brand).bold(),
             ),
             Span::styled(
                 "─".repeat(inner.width.saturating_sub(16) as usize),
-                Style::default().fg(Color::DarkGray),
+                Style::default().fg(app.theme.border),
             ),
         ]));
 
@@ -158,14 +158,14 @@ fn render_insights(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(content, inner);
 }
 
-fn render_footer(f: &mut Frame, _app: &App, area: Rect) {
+fn render_footer(f: &mut Frame, app: &App, area: Rect) {
     let hints = vec![
-        Span::styled("a", Style::default().fg(Color::Yellow).bold()),
+        Span::styled("a", Style::default().fg(app.theme.key_hint).bold()),
         Span::raw(":Analyze  "),
-        Span::styled("p", Style::default().fg(Color::Yellow).bold()),
+        Span::styled("p", Style::default().fg(app.theme.key_hint).bold()),
         Span::raw(":Pause  "),
-        Span::styled("r", Style::default().fg(Color::Yellow).bold()),
+        Span::styled("r", Style::default().fg(app.theme.key_hint).bold()),
         Span::raw(":Refresh"),
     ];
-    widgets::render_footer(f, area, hints);
+    widgets::render_footer(f, app, area, hints);
 }

@@ -1,5 +1,6 @@
 use crate::app::App;
 use crate::ebpf::EbpfStatus;
+use crate::theme::Theme;
 use crate::ui::widgets;
 use ratatui::{
     prelude::*,
@@ -50,16 +51,16 @@ fn render_alerts(f: &mut Frame, app: &App, area: Rect) {
     let alerts = app.network_intel.active_alerts();
     let lines: Vec<Line> = alerts.iter().take(3).map(|alert| {
         let (icon, style) = match alert.severity {
-            AlertSeverity::Critical => ("● ", Style::default().fg(Color::Red).bold()),
-            AlertSeverity::Warning => ("▲ ", Style::default().fg(Color::Yellow)),
+            AlertSeverity::Critical => ("● ", Style::default().fg(app.theme.status_error).bold()),
+            AlertSeverity::Warning => ("▲ ", Style::default().fg(app.theme.status_warn)),
         };
         Line::from(vec![
             Span::styled(icon, style),
             Span::styled(alert.category.label(), style),
             Span::raw(": "),
-            Span::styled(alert.message.clone(), Style::default().fg(Color::White)),
+            Span::styled(alert.message.clone(), Style::default().fg(app.theme.text_primary)),
             Span::raw("  "),
-            Span::styled(alert.detail.clone(), Style::default().fg(Color::DarkGray)),
+            Span::styled(alert.detail.clone(), Style::default().fg(app.theme.text_muted)),
         ])
     }).collect();
 
@@ -67,22 +68,22 @@ fn render_alerts(f: &mut Frame, app: &App, area: Rect) {
         .block(
             Block::default()
                 .title(format!(" ⚠ Alerts ({}) ", alerts.len()))
-                .title_style(Style::default().fg(Color::Yellow).bold())
+                .title_style(Style::default().fg(app.theme.status_warn).bold())
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Yellow)),
+                .border_style(Style::default().fg(app.theme.status_warn)),
         );
     f.render_widget(alert_widget, area);
 }
 
 fn render_interface_table(f: &mut Frame, app: &App, area: Rect) {
     let header = Row::new(vec![
-        Cell::from("Interface").style(Style::default().fg(Color::Cyan).bold()),
-        Cell::from("IP Address").style(Style::default().fg(Color::Cyan).bold()),
-        Cell::from("RX Rate").style(Style::default().fg(Color::Cyan).bold()),
-        Cell::from("TX Rate").style(Style::default().fg(Color::Cyan).bold()),
-        Cell::from("RX Total").style(Style::default().fg(Color::Cyan).bold()),
-        Cell::from("TX Total").style(Style::default().fg(Color::Cyan).bold()),
-        Cell::from("Status").style(Style::default().fg(Color::Cyan).bold()),
+        Cell::from("Interface").style(Style::default().fg(app.theme.brand).bold()),
+        Cell::from("IP Address").style(Style::default().fg(app.theme.brand).bold()),
+        Cell::from("RX Rate").style(Style::default().fg(app.theme.brand).bold()),
+        Cell::from("TX Rate").style(Style::default().fg(app.theme.brand).bold()),
+        Cell::from("RX Total").style(Style::default().fg(app.theme.brand).bold()),
+        Cell::from("TX Total").style(Style::default().fg(app.theme.brand).bold()),
+        Cell::from("Status").style(Style::default().fg(app.theme.brand).bold()),
     ])
     .height(1);
 
@@ -107,14 +108,14 @@ fn render_interface_table(f: &mut Frame, app: &App, area: Rect) {
                 .unwrap_or(false);
 
             let status_style = if is_up {
-                Style::default().fg(Color::Green)
+                Style::default().fg(app.theme.status_good)
             } else {
-                Style::default().fg(Color::Red)
+                Style::default().fg(app.theme.status_error)
             };
 
             let selected = app.selected_interface == Some(i);
             let row_style = if selected {
-                Style::default().bg(Color::Rgb(40, 40, 60))
+                Style::default().bg(app.theme.selection_bg)
             } else {
                 Style::default()
             };
@@ -128,8 +129,8 @@ fn render_interface_table(f: &mut Frame, app: &App, area: Rect) {
             Row::new(vec![
                 name_cell,
                 Cell::from(ip),
-                Cell::from(widgets::format_bytes_rate(iface.rx_rate)).style(Style::default().fg(Color::Green)),
-                Cell::from(widgets::format_bytes_rate(iface.tx_rate)).style(Style::default().fg(Color::Blue)),
+                Cell::from(widgets::format_bytes_rate(iface.rx_rate)).style(Style::default().fg(app.theme.rx_rate)),
+                Cell::from(widgets::format_bytes_rate(iface.tx_rate)).style(Style::default().fg(app.theme.tx_rate)),
                 Cell::from(widgets::format_bytes_total(iface.rx_bytes_total)),
                 Cell::from(widgets::format_bytes_total(iface.tx_bytes_total)),
                 Cell::from(if is_up { "UP" } else { "DOWN" }).style(status_style),
@@ -155,7 +156,7 @@ fn render_interface_table(f: &mut Frame, app: &App, area: Rect) {
         Block::default()
             .title(" Interfaces ")
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::DarkGray)),
+            .border_style(Style::default().fg(app.theme.border)),
     );
 
     f.render_widget(table, area);
@@ -175,26 +176,26 @@ fn render_sparkline(f: &mut Frame, app: &App, area: Rect) {
                 Block::default()
                     .title(format!(" RX {} ", iface.name))
                     .borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::DarkGray)),
+                    .border_style(Style::default().fg(app.theme.border)),
             )
             .data(iface.rx_history.as_slices().0)
-            .style(Style::default().fg(Color::Green));
+            .style(Style::default().fg(app.theme.rx_rate));
 
         let tx_spark = Sparkline::default()
             .block(
                 Block::default()
                     .title(format!(" TX {} ", iface.name))
                     .borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::DarkGray)),
+                    .border_style(Style::default().fg(app.theme.border)),
             )
             .data(iface.tx_history.as_slices().0)
-            .style(Style::default().fg(Color::Blue));
+            .style(Style::default().fg(app.theme.tx_rate));
 
         f.render_widget(rx_spark, chunks[0]);
         f.render_widget(tx_spark, chunks[1]);
     } else {
         let empty = Paragraph::new("No interface selected")
-            .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::DarkGray)));
+            .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(app.theme.border)));
         f.render_widget(empty, area);
     }
 }
@@ -215,12 +216,12 @@ fn render_bandwidth_graph(f: &mut Frame, app: &App, area: Rect) {
 
     if active.is_empty() {
         let empty = Paragraph::new(" No active interfaces")
-            .style(Style::default().fg(Color::DarkGray))
+            .style(Style::default().fg(app.theme.text_muted))
             .block(
                 Block::default()
                     .title(" Bandwidth ")
                     .borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::DarkGray)),
+                    .border_style(Style::default().fg(app.theme.border)),
             );
         f.render_widget(empty, area);
         return;
@@ -261,10 +262,10 @@ fn render_bandwidth_graph(f: &mut Frame, app: &App, area: Rect) {
             Block::default()
                 .title(rx_title)
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::DarkGray)),
+                .border_style(Style::default().fg(app.theme.border)),
         )
         .data(&agg_rx)
-        .style(Style::default().fg(Color::Green));
+        .style(Style::default().fg(app.theme.rx_rate));
     f.render_widget(rx_spark, chunks[0]);
 
     let tx_title = format!(
@@ -277,19 +278,19 @@ fn render_bandwidth_graph(f: &mut Frame, app: &App, area: Rect) {
             Block::default()
                 .title(tx_title)
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::DarkGray)),
+                .border_style(Style::default().fg(app.theme.border)),
         )
         .data(&agg_tx)
-        .style(Style::default().fg(Color::Blue));
+        .style(Style::default().fg(app.theme.tx_rate));
     f.render_widget(tx_spark, chunks[1]);
 }
 
 fn render_top_connections(f: &mut Frame, app: &App, area: Rect) {
     let header = Row::new(vec![
-        Cell::from("Process").style(Style::default().fg(Color::Cyan).bold()),
-        Cell::from("Proto").style(Style::default().fg(Color::Cyan).bold()),
-        Cell::from("State").style(Style::default().fg(Color::Cyan).bold()),
-        Cell::from("Remote").style(Style::default().fg(Color::Cyan).bold()),
+        Cell::from("Process").style(Style::default().fg(app.theme.brand).bold()),
+        Cell::from("Proto").style(Style::default().fg(app.theme.brand).bold()),
+        Cell::from("State").style(Style::default().fg(app.theme.brand).bold()),
+        Cell::from("Remote").style(Style::default().fg(app.theme.brand).bold()),
     ])
     .height(1);
 
@@ -302,7 +303,7 @@ fn render_top_connections(f: &mut Frame, app: &App, area: Rect) {
             Row::new(vec![
                 Cell::from(conn.process_name.as_deref().unwrap_or("—").to_string()),
                 Cell::from(conn.protocol.clone()),
-                Cell::from(conn.state.clone()).style(Style::default().fg(Color::Green)),
+                Cell::from(conn.state.clone()).style(Style::default().fg(app.theme.status_good)),
                 Cell::from(conn.remote_addr.clone()),
             ])
         })
@@ -322,7 +323,7 @@ fn render_top_connections(f: &mut Frame, app: &App, area: Rect) {
         Block::default()
             .title(" Top Connections ")
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::DarkGray)),
+            .border_style(Style::default().fg(app.theme.border)),
     );
 
     f.render_widget(table, area);
@@ -342,19 +343,19 @@ fn render_health(f: &mut Frame, app: &App, area: Rect) {
         .unwrap_or_else(|| "—".to_string());
 
     let gw_style = if hs.gateway_loss_pct < 1.0 {
-        Style::default().fg(Color::Green)
+        Style::default().fg(app.theme.status_good)
     } else if hs.gateway_loss_pct < 50.0 {
-        Style::default().fg(Color::Yellow)
+        Style::default().fg(app.theme.status_warn)
     } else {
-        Style::default().fg(Color::Red)
+        Style::default().fg(app.theme.status_error)
     };
 
     let dns_style = if hs.dns_loss_pct < 1.0 {
-        Style::default().fg(Color::Green)
+        Style::default().fg(app.theme.status_good)
     } else if hs.dns_loss_pct < 50.0 {
-        Style::default().fg(Color::Yellow)
+        Style::default().fg(app.theme.status_warn)
     } else {
-        Style::default().fg(Color::Red)
+        Style::default().fg(app.theme.status_error)
     };
 
     let gw_label = app
@@ -379,12 +380,12 @@ fn render_health(f: &mut Frame, app: &App, area: Rect) {
         .sum();
 
     let ebpf_span = match &app.ebpf_status {
-        EbpfStatus::Active => Span::styled("eBPF: ● active", Style::default().fg(Color::Green)),
+        EbpfStatus::Active => Span::styled("eBPF: ● active", Style::default().fg(app.theme.status_good)),
         EbpfStatus::Unavailable(reason) => Span::styled(
             format!("eBPF: ⚠ {reason}"),
-            Style::default().fg(Color::Yellow),
+            Style::default().fg(app.theme.status_warn),
         ),
-        EbpfStatus::NotCompiled => Span::styled("eBPF: off", Style::default().fg(Color::DarkGray)),
+        EbpfStatus::NotCompiled => Span::styled("eBPF: off", Style::default().fg(app.theme.text_muted)),
     };
 
     let line1 = Line::from(vec![
@@ -412,19 +413,19 @@ fn render_health(f: &mut Frame, app: &App, area: Rect) {
         .block(
             Block::default()
                 .title(" Health ")
-                .title_style(Style::default().fg(Color::Cyan))
+                .title_style(Style::default().fg(app.theme.brand))
                 .borders(Borders::LEFT)
-                .border_style(Style::default().fg(Color::Cyan)),
+                .border_style(Style::default().fg(app.theme.brand)),
         );
 
     f.render_widget(health, area);
 }
 
-fn rtt_heatmap_spans(history: &[Option<f64>], width: usize) -> Vec<Span<'static>> {
+fn rtt_heatmap_spans(history: &[Option<f64>], width: usize, t: &Theme) -> Vec<Span<'static>> {
     if history.is_empty() {
         return vec![Span::styled(
             " No data yet".to_string(),
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(t.text_muted),
         )];
     }
 
@@ -443,17 +444,17 @@ fn rtt_heatmap_spans(history: &[Option<f64>], width: usize) -> Vec<Span<'static>
         .iter()
         .map(|sample| {
             match sample {
-                None => Span::styled("▮", Style::default().fg(Color::Red)),
+                None => Span::styled("▮", Style::default().fg(t.status_error)),
                 Some(rtt) => {
                     let ratio = (*rtt / max_rtt).min(1.0);
                     let color = if ratio < 0.3 {
-                        Color::Green
+                        t.status_good
                     } else if ratio < 0.6 {
-                        Color::Yellow
+                        t.status_warn
                     } else if ratio < 0.85 {
                         Color::Rgb(255, 165, 0) // orange
                     } else {
-                        Color::Red
+                        t.status_error
                     };
                     // Use block characters with varying fill for fine granularity
                     let block = match ((ratio * 7.0) as u8).min(7) {
@@ -476,9 +477,9 @@ fn rtt_heatmap_spans(history: &[Option<f64>], width: usize) -> Vec<Span<'static>
 fn render_latency_heatmap(f: &mut Frame, app: &App, area: Rect) {
     let block = Block::default()
         .title(" Latency Heatmap ")
-        .title_style(Style::default().fg(Color::Cyan))
+        .title_style(Style::default().fg(app.theme.brand))
         .borders(Borders::LEFT)
-        .border_style(Style::default().fg(Color::Cyan));
+        .border_style(Style::default().fg(app.theme.brand));
     let inner = block.inner(area);
     f.render_widget(block, area);
 
@@ -492,26 +493,26 @@ fn render_latency_heatmap(f: &mut Frame, app: &App, area: Rect) {
 
     // Gateway row
     let mut gw_spans: Vec<Span> = vec![
-        Span::styled(" GW  ", Style::default().fg(Color::Cyan).bold()),
+        Span::styled(" GW  ", Style::default().fg(app.theme.brand).bold()),
     ];
-    gw_spans.extend(rtt_heatmap_spans(hs.gateway_rtt_history.as_slices().0, avail_width));
+    gw_spans.extend(rtt_heatmap_spans(hs.gateway_rtt_history.as_slices().0, avail_width, &app.theme));
     if let Some(rtt) = hs.gateway_rtt_ms {
         gw_spans.push(Span::styled(
             format!(" {:.1}ms", rtt),
-            Style::default().fg(Color::White),
+            Style::default().fg(app.theme.text_primary),
         ));
     }
     let gw_line = Line::from(gw_spans);
 
     // DNS row
     let mut dns_spans: Vec<Span> = vec![
-        Span::styled(" DNS ", Style::default().fg(Color::Cyan).bold()),
+        Span::styled(" DNS ", Style::default().fg(app.theme.brand).bold()),
     ];
-    dns_spans.extend(rtt_heatmap_spans(hs.dns_rtt_history.as_slices().0, avail_width));
+    dns_spans.extend(rtt_heatmap_spans(hs.dns_rtt_history.as_slices().0, avail_width, &app.theme));
     if let Some(rtt) = hs.dns_rtt_ms {
         dns_spans.push(Span::styled(
             format!(" {:.1}ms", rtt),
-            Style::default().fg(Color::White),
+            Style::default().fg(app.theme.text_primary),
         ));
     }
     let dns_line = Line::from(dns_spans);
@@ -520,14 +521,14 @@ fn render_latency_heatmap(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(content, inner);
 }
 
-fn render_footer(f: &mut Frame, _app: &App, area: Rect) {
+fn render_footer(f: &mut Frame, app: &App, area: Rect) {
     let hints = vec![
-        Span::styled("a", Style::default().fg(Color::Yellow).bold()),
+        Span::styled("a", Style::default().fg(app.theme.key_hint).bold()),
         Span::raw(":Analyze  "),
-        Span::styled("p", Style::default().fg(Color::Yellow).bold()),
+        Span::styled("p", Style::default().fg(app.theme.key_hint).bold()),
         Span::raw(":Pause  "),
-        Span::styled("r", Style::default().fg(Color::Yellow).bold()),
+        Span::styled("r", Style::default().fg(app.theme.key_hint).bold()),
         Span::raw(":Refresh"),
     ];
-    widgets::render_footer(f, area, hints);
+    widgets::render_footer(f, app, area, hints);
 }
