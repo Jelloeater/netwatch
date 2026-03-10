@@ -19,7 +19,7 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
         ])
         .split(area);
 
-    render_header(f, chunks[0]);
+    render_header(f, app, chunks[0]);
     render_topology(f, app, chunks[1]);
     render_summary(f, app, chunks[2]);
     render_footer(f, app, chunks[3]);
@@ -29,23 +29,8 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
     }
 }
 
-fn render_header(f: &mut Frame, area: Rect) {
-    let now = chrono::Local::now().format("%H:%M:%S").to_string();
-    let header = Paragraph::new(Line::from(vec![
-        Span::styled(" NetWatch ", Style::default().fg(Color::Cyan).bold()),
-        Span::raw("│ "),
-        Span::raw("[1] Dashboard  [2] Connections  [3] Interfaces  [4] Packets  [5] Stats  "),
-        Span::styled("[6] Topology", Style::default().fg(Color::Yellow).bold()),
-        Span::raw("  [7] Timeline  [8] Insights"),
-        Span::raw("  │ "),
-        Span::styled(now, Style::default().fg(Color::DarkGray)),
-    ]))
-    .block(
-        Block::default()
-            .borders(Borders::BOTTOM)
-            .border_style(Style::default().fg(Color::DarkGray)),
-    );
-    f.render_widget(header, area);
+fn render_header(f: &mut Frame, app: &App, area: Rect) {
+    widgets::render_header(f, app, area);
 }
 
 struct RemoteNode {
@@ -402,46 +387,20 @@ fn render_summary(f: &mut Frame, app: &App, area: Rect) {
 }
 
 fn render_footer(f: &mut Frame, app: &App, area: Rect) {
-    let spans = if app.traceroute_view_open {
+    let hints = if app.traceroute_view_open {
         vec![
-            Span::styled(" Esc", Style::default().fg(Color::Yellow).bold()),
+            Span::styled("Esc", Style::default().fg(Color::Yellow).bold()),
             Span::raw(":Close  "),
-            Span::styled("↑↓", Style::default().fg(Color::Yellow).bold()),
-            Span::raw(":Scroll  "),
-            Span::styled("q", Style::default().fg(Color::Yellow).bold()),
-            Span::raw(":Quit"),
         ]
     } else {
         vec![
-            Span::styled(" q", Style::default().fg(Color::Yellow).bold()),
-            Span::raw(":Quit  "),
-            Span::styled("a", Style::default().fg(Color::Yellow).bold()),
-            Span::raw(":Analyze  "),
-            Span::styled("↑↓", Style::default().fg(Color::Yellow).bold()),
-            Span::raw(":Scroll  "),
             Span::styled("T", Style::default().fg(Color::Yellow).bold()),
             Span::raw(":Traceroute  "),
             Span::styled("Enter", Style::default().fg(Color::Yellow).bold()),
-            Span::raw(":→Connections  "),
-            Span::styled("p", Style::default().fg(Color::Yellow).bold()),
-            Span::raw(":Pause  "),
-            Span::styled("r", Style::default().fg(Color::Yellow).bold()),
-            Span::raw(":Refresh  "),
-            Span::styled("1-8", Style::default().fg(Color::Yellow).bold()),
-            Span::raw(":Tab  "),
-            Span::styled("g", Style::default().fg(Color::Yellow).bold()),
-            Span::raw(":Geo  "),
-            Span::styled("?", Style::default().fg(Color::Yellow).bold()),
-            Span::raw(":Help"),
+            Span::raw(":→Connections"),
         ]
     };
-    let footer = Paragraph::new(Line::from(spans))
-    .block(
-        Block::default()
-            .borders(Borders::TOP)
-            .border_style(Style::default().fg(Color::DarkGray)),
-    );
-    f.render_widget(footer, area);
+    widgets::render_footer(f, area, hints);
 }
 
 fn health_indicator(rtt: Option<f64>, loss: f64) -> (String, Style) {

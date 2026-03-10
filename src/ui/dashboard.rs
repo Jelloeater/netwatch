@@ -15,13 +15,13 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
             Constraint::Min(6),              // interface table
             Constraint::Length(chart_height), // bandwidth graph or per-iface sparkline
             Constraint::Length(7),            // top connections
-            Constraint::Length(3),            // health status
+            Constraint::Length(4),            // health status
             Constraint::Length(4),            // latency heatmap
             Constraint::Length(3),            // footer
         ])
         .split(area);
 
-    render_header(f, chunks[0]);
+    render_header(f, app, chunks[0]);
     render_interface_table(f, app, chunks[1]);
     if app.selected_interface.is_some() {
         render_sparkline(f, app, chunks[2]);
@@ -31,21 +31,11 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
     render_top_connections(f, app, chunks[3]);
     render_health(f, app, chunks[4]);
     render_latency_heatmap(f, app, chunks[5]);
-    render_footer(f, chunks[6]);
+    render_footer(f, app, chunks[6]);
 }
 
-fn render_header(f: &mut Frame, area: Rect) {
-    let now = chrono::Local::now().format("%H:%M:%S").to_string();
-    let header = Paragraph::new(Line::from(vec![
-        Span::styled(" NetWatch ", Style::default().fg(Color::Cyan).bold()),
-        Span::raw("│ "),
-        Span::styled("[1] Dashboard", Style::default().fg(Color::Yellow).bold()),
-        Span::raw("  [2] Connections  [3] Interfaces  [4] Packets  [5] Stats  [6] Topology  [7] Timeline  [8] Insights"),
-        Span::raw("  │ "),
-        Span::styled(now, Style::default().fg(Color::DarkGray)),
-    ]))
-    .block(Block::default().borders(Borders::BOTTOM).border_style(Style::default().fg(Color::DarkGray)));
-    f.render_widget(header, area);
+fn render_header(f: &mut Frame, app: &App, area: Rect) {
+    widgets::render_header(f, app, area);
 }
 
 fn render_interface_table(f: &mut Frame, app: &App, area: Rect) {
@@ -86,14 +76,21 @@ fn render_interface_table(f: &mut Frame, app: &App, area: Rect) {
                 Style::default().fg(Color::Red)
             };
 
-            let row_style = if app.selected_interface == Some(i) {
-                Style::default().bg(Color::DarkGray)
+            let selected = app.selected_interface == Some(i);
+            let row_style = if selected {
+                Style::default().bg(Color::Rgb(40, 40, 60))
             } else {
                 Style::default()
             };
 
+            let name_cell = if selected {
+                Cell::from(format!("► {}", iface.name))
+            } else {
+                Cell::from(format!("  {}", iface.name))
+            };
+
             Row::new(vec![
-                Cell::from(iface.name.clone()),
+                name_cell,
                 Cell::from(ip),
                 Cell::from(widgets::format_bytes_rate(iface.rx_rate)).style(Style::default().fg(Color::Green)),
                 Cell::from(widgets::format_bytes_rate(iface.tx_rate)).style(Style::default().fg(Color::Blue)),
@@ -338,33 +335,50 @@ fn render_health(f: &mut Frame, app: &App, area: Rect) {
         .map(|i| i.rx_errors + i.tx_errors)
         .sum();
 
+    let total_drops: u64 = app
+        .traffic
+        .interfaces
+        .iter()
+        .map(|i| i.rx_drops + i.tx_drops)
+        .sum();
+
     let ebpf_span = match &app.ebpf_status {
-        EbpfStatus::Active => Span::styled("  │  eBPF: ● active", Style::default().fg(Color::Green)),
+        EbpfStatus::Active => Span::styled("eBPF: ● active", Style::default().fg(Color::Green)),
         EbpfStatus::Unavailable(reason) => Span::styled(
-            format!("  │  eBPF: ⚠ {reason}"),
+            format!("eBPF: ⚠ {reason}"),
             Style::default().fg(Color::Yellow),
         ),
-        EbpfStatus::NotCompiled => Span::styled("  │  eBPF: off", Style::default().fg(Color::DarkGray)),
+        EbpfStatus::NotCompiled => Span::styled("eBPF: off", Style::default().fg(Color::DarkGray)),
     };
 
-    let health = Paragraph::new(Line::from(vec![
+    let line1 = Line::from(vec![
         Span::raw(" GW "),
-        Span::raw(gw_label),
-        Span::raw(": "),
+        Span::raw(gw_label.to_string()),
+        Span::raw("  "),
+        Span::styled("●", gw_style),
+        Span::raw(" "),
         Span::styled(gw_rtt, gw_style),
-        Span::raw(format!(" ({:.0}% loss)", hs.gateway_loss_pct)),
-        Span::raw("  │  DNS: "),
+        Span::raw(format!("  {:.0}% loss", hs.gateway_loss_pct)),
+        Span::raw("   │  DNS  "),
+        Span::styled("●", dns_style),
+        Span::raw(" "),
         Span::styled(dns_rtt, dns_style),
-        Span::raw(format!(" ({:.0}% loss)", hs.dns_loss_pct)),
-        Span::raw(format!("  │  Errors: {}", total_errors)),
+        Span::raw(format!("  {:.0}% loss", hs.dns_loss_pct)),
+    ]);
+
+    let line2 = Line::from(vec![
+        Span::raw(format!(" Errors: {}  Drops: {}", total_errors, total_drops)),
+        Span::raw("   │  "),
         ebpf_span,
-    ]))
-    .block(
-        Block::default()
-            .title(" Health ")
-            .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::DarkGray)),
-    );
+    ]);
+
+    let health = Paragraph::new(vec![line1, line2])
+        .block(
+            Block::default()
+                .title(" Health ")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::DarkGray)),
+        );
 
     f.render_widget(health, area);
 }
@@ -468,25 +482,14 @@ fn render_latency_heatmap(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(content, inner);
 }
 
-fn render_footer(f: &mut Frame, area: Rect) {
-    let footer = Paragraph::new(Line::from(vec![
-        Span::styled(" q", Style::default().fg(Color::Yellow).bold()),
-        Span::raw(":Quit  "),
+fn render_footer(f: &mut Frame, _app: &App, area: Rect) {
+    let hints = vec![
         Span::styled("a", Style::default().fg(Color::Yellow).bold()),
         Span::raw(":Analyze  "),
-        Span::styled("↑↓", Style::default().fg(Color::Yellow).bold()),
-        Span::raw(":Select  "),
         Span::styled("p", Style::default().fg(Color::Yellow).bold()),
         Span::raw(":Pause  "),
         Span::styled("r", Style::default().fg(Color::Yellow).bold()),
-        Span::raw(":Refresh  "),
-        Span::styled("1-8", Style::default().fg(Color::Yellow).bold()),
-        Span::raw(":Tab  "),
-        Span::styled("g", Style::default().fg(Color::Yellow).bold()),
-        Span::raw(":Geo  "),
-        Span::styled("?", Style::default().fg(Color::Yellow).bold()),
-        Span::raw(":Help"),
-    ]))
-    .block(Block::default().borders(Borders::TOP).border_style(Style::default().fg(Color::DarkGray)));
-    f.render_widget(footer, area);
+        Span::raw(":Refresh"),
+    ];
+    widgets::render_footer(f, area, hints);
 }

@@ -22,11 +22,11 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
     let packets = app.packet_collector.get_packets();
     let stats = compute_protocol_stats(&packets);
 
-    render_header(f, chunks[0]);
+    render_header(f, app, chunks[0]);
     render_protocol_table(f, app, &stats, chunks[1]);
     render_handshake_histogram(f, app, chunks[2]);
     render_summary(f, &stats, chunks[3]);
-    render_footer(f, chunks[4]);
+    render_footer(f, app, chunks[4]);
 }
 
 struct ProtocolStat {
@@ -70,23 +70,8 @@ fn compute_protocol_stats(packets: &[crate::collectors::packets::CapturedPacket]
     }
 }
 
-fn render_header(f: &mut Frame, area: Rect) {
-    let now = chrono::Local::now().format("%H:%M:%S").to_string();
-    let header = Paragraph::new(Line::from(vec![
-        Span::styled(" NetWatch ", Style::default().fg(Color::Cyan).bold()),
-        Span::raw("│ "),
-        Span::raw("[1] Dashboard  [2] Connections  [3] Interfaces  [4] Packets  "),
-        Span::styled("[5] Stats", Style::default().fg(Color::Yellow).bold()),
-        Span::raw("  [6] Topology  [7] Timeline  [8] Insights"),
-        Span::raw("  │ "),
-        Span::styled(now, Style::default().fg(Color::DarkGray)),
-    ]))
-    .block(
-        Block::default()
-            .borders(Borders::BOTTOM)
-            .border_style(Style::default().fg(Color::DarkGray)),
-    );
-    f.render_widget(header, area);
+fn render_header(f: &mut Frame, app: &App, area: Rect) {
+    widgets::render_header(f, app, area);
 }
 
 fn bar_visual(pct: f64) -> String {
@@ -284,31 +269,16 @@ fn render_handshake_histogram(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(content, inner);
 }
 
-fn render_footer(f: &mut Frame, area: Rect) {
-    let footer = Paragraph::new(Line::from(vec![
-        Span::styled(" q", Style::default().fg(Color::Yellow).bold()),
-        Span::raw(":Quit  "),
+fn render_footer(f: &mut Frame, _app: &App, area: Rect) {
+    let hints = vec![
         Span::styled("a", Style::default().fg(Color::Yellow).bold()),
         Span::raw(":Analyze  "),
-        Span::styled("↑↓", Style::default().fg(Color::Yellow).bold()),
-        Span::raw(":Scroll  "),
         Span::styled("p", Style::default().fg(Color::Yellow).bold()),
         Span::raw(":Pause  "),
         Span::styled("r", Style::default().fg(Color::Yellow).bold()),
-        Span::raw(":Refresh  "),
-        Span::styled("1-8", Style::default().fg(Color::Yellow).bold()),
-        Span::raw(":Tab  "),
-        Span::styled("g", Style::default().fg(Color::Yellow).bold()),
-        Span::raw(":Geo  "),
-        Span::styled("?", Style::default().fg(Color::Yellow).bold()),
-        Span::raw(":Help"),
-    ]))
-    .block(
-        Block::default()
-            .borders(Borders::TOP)
-            .border_style(Style::default().fg(Color::DarkGray)),
-    );
-    f.render_widget(footer, area);
+        Span::raw(":Refresh"),
+    ];
+    widgets::render_footer(f, area, hints);
 }
 
 fn protocol_color(proto: &str) -> Style {

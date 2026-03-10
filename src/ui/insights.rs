@@ -1,5 +1,6 @@
 use crate::app::App;
 use crate::collectors::insights::InsightsStatus;
+use crate::ui::widgets;
 use ratatui::{
     prelude::*,
     widgets::{Block, Borders, Paragraph, Wrap},
@@ -16,28 +17,14 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
         ])
         .split(area);
 
-    render_header(f, chunks[0]);
+    render_header(f, app, chunks[0]);
     render_status(f, app, chunks[1]);
     render_insights(f, app, chunks[2]);
-    render_footer(f, chunks[3]);
+    render_footer(f, app, chunks[3]);
 }
 
-fn render_header(f: &mut Frame, area: Rect) {
-    let now = chrono::Local::now().format("%H:%M:%S").to_string();
-    let header = Paragraph::new(Line::from(vec![
-        Span::styled(" NetWatch ", Style::default().fg(Color::Cyan).bold()),
-        Span::raw("│ "),
-        Span::raw("[1] Dashboard  [2] Connections  [3] Interfaces  [4] Packets  [5] Stats  [6] Topology  [7] Timeline  "),
-        Span::styled("[8] Insights", Style::default().fg(Color::Yellow).bold()),
-        Span::raw("  │ "),
-        Span::styled(now, Style::default().fg(Color::DarkGray)),
-    ]))
-    .block(
-        Block::default()
-            .borders(Borders::BOTTOM)
-            .border_style(Style::default().fg(Color::DarkGray)),
-    );
-    f.render_widget(header, area);
+fn render_header(f: &mut Frame, app: &App, area: Rect) {
+    widgets::render_header(f, app, area);
 }
 
 fn render_status(f: &mut Frame, app: &App, area: Rect) {
@@ -171,27 +158,14 @@ fn render_insights(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(content, inner);
 }
 
-fn render_footer(f: &mut Frame, area: Rect) {
-    let footer = Paragraph::new(Line::from(vec![
-        Span::styled(" q", Style::default().fg(Color::Yellow).bold()),
-        Span::raw(":Quit  "),
+fn render_footer(f: &mut Frame, _app: &App, area: Rect) {
+    let hints = vec![
         Span::styled("a", Style::default().fg(Color::Yellow).bold()),
         Span::raw(":Analyze  "),
-        Span::styled("↑↓", Style::default().fg(Color::Yellow).bold()),
-        Span::raw(":Scroll  "),
         Span::styled("p", Style::default().fg(Color::Yellow).bold()),
         Span::raw(":Pause  "),
         Span::styled("r", Style::default().fg(Color::Yellow).bold()),
-        Span::raw(":Refresh  "),
-        Span::styled("1-8", Style::default().fg(Color::Yellow).bold()),
-        Span::raw(":Tab  "),
-        Span::styled("?", Style::default().fg(Color::Yellow).bold()),
-        Span::raw(":Help"),
-    ]))
-    .block(
-        Block::default()
-            .borders(Borders::TOP)
-            .border_style(Style::default().fg(Color::DarkGray)),
-    );
-    f.render_widget(footer, area);
+        Span::raw(":Refresh"),
+    ];
+    widgets::render_footer(f, area, hints);
 }

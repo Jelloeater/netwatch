@@ -25,25 +25,12 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
 }
 
 fn render_header(f: &mut Frame, app: &App, area: Rect) {
-    let now = chrono::Local::now().format("%H:%M:%S").to_string();
     let count = app.connection_collector.connections.lock().unwrap().len();
-    let header = Paragraph::new(Line::from(vec![
-        Span::styled(" NetWatch ", Style::default().fg(Color::Cyan).bold()),
-        Span::raw("│ "),
-        Span::raw("[1] Dashboard  "),
-        Span::styled("[2] Connections", Style::default().fg(Color::Yellow).bold()),
-        Span::raw("  [3] Interfaces  [4] Packets  [5] Stats  [6] Topology  [7] Timeline  [8] Insights"),
-        Span::raw("  │ "),
+    let extra = vec![
+        Span::raw("  "),
         Span::styled(format!("{count} connections"), Style::default().fg(Color::Green)),
-        Span::raw("  │ "),
-        Span::styled(now, Style::default().fg(Color::DarkGray)),
-    ]))
-    .block(
-        Block::default()
-            .borders(Borders::BOTTOM)
-            .border_style(Style::default().fg(Color::DarkGray)),
-    );
-    f.render_widget(header, area);
+    ];
+    crate::ui::widgets::render_header_with_extra(f, app, area, extra);
 }
 
 fn render_connection_table(f: &mut Frame, app: &App, area: Rect) {
@@ -113,7 +100,7 @@ fn render_connection_table(f: &mut Frame, app: &App, area: Rect) {
             };
 
             let row_style = if i + scroll == app.connection_scroll {
-                Style::default().bg(Color::DarkGray)
+                Style::default().bg(Color::Rgb(40, 40, 60))
             } else {
                 Style::default()
             };
@@ -197,50 +184,24 @@ fn render_connection_table(f: &mut Frame, app: &App, area: Rect) {
 }
 
 fn render_footer(f: &mut Frame, app: &App, area: Rect) {
-    let spans = if app.traceroute_view_open {
+    let hints = if app.traceroute_view_open {
         vec![
-            Span::styled(" Esc", Style::default().fg(Color::Yellow).bold()),
+            Span::styled("Esc", Style::default().fg(Color::Yellow).bold()),
             Span::raw(":Close  "),
-            Span::styled("↑↓", Style::default().fg(Color::Yellow).bold()),
-            Span::raw(":Scroll  "),
             Span::styled("q", Style::default().fg(Color::Yellow).bold()),
             Span::raw(":Quit"),
         ]
     } else {
         vec![
-            Span::styled(" q", Style::default().fg(Color::Yellow).bold()),
-            Span::raw(":Quit  "),
-            Span::styled("a", Style::default().fg(Color::Yellow).bold()),
-            Span::raw(":Analyze  "),
-            Span::styled("↑↓", Style::default().fg(Color::Yellow).bold()),
-            Span::raw(":Scroll  "),
             Span::styled("s", Style::default().fg(Color::Yellow).bold()),
             Span::raw(":Sort  "),
             Span::styled("T", Style::default().fg(Color::Yellow).bold()),
             Span::raw(":Traceroute  "),
             Span::styled("Enter", Style::default().fg(Color::Yellow).bold()),
-            Span::raw(":→Packets  "),
-            Span::styled("p", Style::default().fg(Color::Yellow).bold()),
-            Span::raw(":Pause  "),
-            Span::styled("r", Style::default().fg(Color::Yellow).bold()),
-            Span::raw(":Refresh  "),
-            Span::styled("1-8", Style::default().fg(Color::Yellow).bold()),
-            Span::raw(":Tab  "),
-            Span::styled("g", Style::default().fg(Color::Yellow).bold()),
-            Span::raw(":Geo  "),
-            Span::styled("W", Style::default().fg(Color::Yellow).bold()),
-            Span::raw(":Whois  "),
-            Span::styled("?", Style::default().fg(Color::Yellow).bold()),
-            Span::raw(":Help"),
+            Span::raw(":→Packets"),
         ]
     };
-    let footer = Paragraph::new(Line::from(spans))
-    .block(
-        Block::default()
-            .borders(Borders::TOP)
-            .border_style(Style::default().fg(Color::DarkGray)),
-    );
-    f.render_widget(footer, area);
+    crate::ui::widgets::render_footer(f, area, hints);
 }
 
 fn render_traceroute_overlay(f: &mut Frame, app: &App, area: Rect) {

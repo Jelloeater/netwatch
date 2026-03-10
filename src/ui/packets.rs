@@ -28,7 +28,6 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
 }
 
 fn render_header(f: &mut Frame, app: &App, area: Rect, pkt_count: usize) {
-    let now = chrono::Local::now().format("%H:%M:%S").to_string();
     let cap_status = if app.packet_collector.is_capturing() {
         Span::styled("● CAPTURING", Style::default().fg(Color::Red).bold())
     } else {
@@ -37,50 +36,91 @@ fn render_header(f: &mut Frame, app: &App, area: Rect, pkt_count: usize) {
 
     let iface_name = app.capture_interface.as_str();
 
-    let mut line1_spans = vec![
-        Span::styled(" NetWatch ", Style::default().fg(Color::Cyan).bold()),
-        Span::raw("│ "),
-        Span::raw("[1] Dashboard  [2] Connections  [3] Interfaces  "),
-        Span::styled("[4] Packets", Style::default().fg(Color::Yellow).bold()),
-        Span::raw("  [5] Stats  [6] Topology  [7] Timeline  [8] Insights"),
-        Span::raw("  │ "),
+    let mut extra = vec![
+        Span::raw("  "),
         cap_status,
-        Span::raw(format!("  on {iface_name}  ({pkt_count} pkts)  ")),
+        Span::raw(format!("  on {iface_name}  ({pkt_count} pkts)")),
     ];
     if let Some(ref bpf) = app.bpf_filter_active {
-        line1_spans.push(Span::styled("BPF: ", Style::default().fg(Color::Yellow).bold()));
-        line1_spans.push(Span::styled(bpf.clone(), Style::default().fg(Color::White)));
-        line1_spans.push(Span::raw("  "));
+        extra.push(Span::raw("  "));
+        extra.push(Span::styled("BPF: ", Style::default().fg(Color::Yellow).bold()));
+        extra.push(Span::styled(bpf.clone(), Style::default().fg(Color::White)));
     }
-    line1_spans.push(Span::styled(now, Style::default().fg(Color::DarkGray)));
-    let line1 = Line::from(line1_spans);
 
-    let lines = if let Some(e) = app.packet_collector.get_error() {
-        vec![
+    if let Some(e) = app.packet_collector.get_error() {
+        let line1 = build_packets_header_line(app, extra);
+        let lines = vec![
             line1,
             Line::from(vec![
                 Span::raw(" ⚠ "),
                 Span::styled(e, Style::default().fg(Color::Red).bold()),
             ]),
-        ]
+        ];
+        let header = Paragraph::new(lines).block(
+            Block::default()
+                .borders(Borders::BOTTOM)
+                .border_style(Style::default().fg(Color::DarkGray)),
+        );
+        f.render_widget(header, area);
     } else if let Some(ref status) = app.export_status {
-        vec![
+        let line1 = build_packets_header_line(app, extra);
+        let lines = vec![
             line1,
             Line::from(vec![
                 Span::raw(" ✓ "),
                 Span::styled(status.clone(), Style::default().fg(Color::Green).bold()),
             ]),
-        ]
+        ];
+        let header = Paragraph::new(lines).block(
+            Block::default()
+                .borders(Borders::BOTTOM)
+                .border_style(Style::default().fg(Color::DarkGray)),
+        );
+        f.render_widget(header, area);
     } else {
-        vec![line1]
-    };
+        crate::ui::widgets::render_header_with_extra(f, app, area, extra);
+    }
+}
 
-    let header = Paragraph::new(lines).block(
-        Block::default()
-            .borders(Borders::BOTTOM)
-            .border_style(Style::default().fg(Color::DarkGray)),
-    );
-    f.render_widget(header, area);
+fn build_packets_header_line(app: &App, extra: Vec<Span<'static>>) -> Line<'static> {
+    use crate::app::Tab;
+    let now = chrono::Local::now().format("%H:%M:%S").to_string();
+    let tabs: &[(&str, &str, Tab)] = &[
+        ("1", "Dashboard", Tab::Dashboard),
+        ("2", "Connections", Tab::Connections),
+        ("3", "Interfaces", Tab::Interfaces),
+        ("4", "Packets", Tab::Packets),
+        ("5", "Stats", Tab::Stats),
+        ("6", "Topology", Tab::Topology),
+        ("7", "Timeline", Tab::Timeline),
+        ("8", "Insights", Tab::Insights),
+    ];
+    let mut spans: Vec<Span<'static>> = vec![
+        Span::styled("◉ NetWatch ", Style::default().fg(Color::Cyan).bold()),
+    ];
+    for (i, (num, name, tab)) in tabs.iter().enumerate() {
+        if i > 0 {
+            spans.push(Span::styled(" │ ", Style::default().fg(Color::DarkGray)));
+        }
+        let label = format!("[{}] {}", num, name);
+        if *tab == app.current_tab {
+            spans.push(Span::styled(label, Style::default().fg(Color::Yellow).bold()));
+        } else {
+            spans.push(Span::styled(label, Style::default().fg(Color::DarkGray)));
+        }
+    }
+    if app.paused {
+        spans.push(Span::styled(
+            " ⏸ PAUSED ",
+            Style::default().fg(Color::Black).bg(Color::Yellow),
+        ));
+    }
+    for s in extra {
+        spans.push(s);
+    }
+    spans.push(Span::raw("  "));
+    spans.push(Span::styled(now, Style::default().fg(Color::DarkGray)));
+    Line::from(spans)
 }
 
 fn render_packet_list(f: &mut Frame, app: &App, packets: &[CapturedPacket], area: Rect) {
@@ -126,7 +166,7 @@ fn render_packet_list(f: &mut Frame, app: &App, packets: &[CapturedPacket], area
             let proto_style = protocol_color(&pkt.protocol);
             let selected = app.packet_selected == Some(pkt.id);
             let row_style = if selected {
-                Style::default().bg(Color::DarkGray)
+                Style::default().bg(Color::Rgb(40, 40, 60))
             } else {
                 expert_row_style(pkt.expert)
             };
@@ -643,10 +683,31 @@ fn render_footer(f: &mut Frame, app: &App, area: Rect) {
         return;
     }
 
-    let capture_key = if app.packet_collector.is_capturing() {
-        "c:Stop"
+    let mut hints = if app.stream_view_open {
+        vec![
+            Span::styled("Esc", Style::default().fg(Color::Yellow).bold()),
+            Span::raw(":Close  "),
+            Span::styled("→←", Style::default().fg(Color::Yellow).bold()),
+            Span::raw(":Direction  "),
+            Span::styled("h", Style::default().fg(Color::Yellow).bold()),
+            Span::raw(":Hex/Text"),
+        ]
     } else {
-        "c:Capture"
+        let capture_key = if app.packet_collector.is_capturing() {
+            "Stop"
+        } else {
+            "Capture"
+        };
+        vec![
+            Span::styled("c", Style::default().fg(Color::Yellow).bold()),
+            Span::raw(format!(":{capture_key}  ")),
+            Span::styled("/", Style::default().fg(Color::Yellow).bold()),
+            Span::raw(":Filter  "),
+            Span::styled("s", Style::default().fg(Color::Yellow).bold()),
+            Span::raw(":Stream  "),
+            Span::styled("f", Style::default().fg(Color::Yellow).bold()),
+            Span::raw(":Follow"),
+        ]
     };
 
     let follow_indicator = if app.packet_follow {
@@ -654,76 +715,15 @@ fn render_footer(f: &mut Frame, app: &App, area: Rect) {
     } else {
         Span::raw("")
     };
+    hints.push(follow_indicator);
 
-    let filter_indicator = if let Some(ref ft) = app.packet_filter_active {
-        vec![
-            Span::styled(" [FILTER: ", Style::default().fg(Color::Yellow).bold()),
-            Span::styled(ft.clone(), Style::default().fg(Color::White)),
-            Span::styled("]", Style::default().fg(Color::Yellow).bold()),
-        ]
-    } else {
-        vec![]
-    };
+    if let Some(ref ft) = app.packet_filter_active {
+        hints.push(Span::styled(" [FILTER: ", Style::default().fg(Color::Yellow).bold()));
+        hints.push(Span::styled(ft.clone(), Style::default().fg(Color::White)));
+        hints.push(Span::styled("]", Style::default().fg(Color::Yellow).bold()));
+    }
 
-    let mut hints = if app.stream_view_open {
-        vec![
-            Span::styled(" Esc", Style::default().fg(Color::Yellow).bold()),
-            Span::raw(":Close  "),
-            Span::styled("↑↓", Style::default().fg(Color::Yellow).bold()),
-            Span::raw(":Scroll  "),
-            Span::styled("→←", Style::default().fg(Color::Yellow).bold()),
-            Span::raw(":Direction  "),
-            Span::styled("a", Style::default().fg(Color::Yellow).bold()),
-            Span::raw(":Both  "),
-            Span::styled("h", Style::default().fg(Color::Yellow).bold()),
-            Span::raw(":Hex/Text"),
-        ]
-    } else {
-        vec![
-            Span::styled(" q", Style::default().fg(Color::Yellow).bold()),
-            Span::raw(":Quit  "),
-            Span::styled("a", Style::default().fg(Color::Yellow).bold()),
-            Span::raw(":Analyze  "),
-            Span::styled("c", Style::default().fg(Color::Yellow).bold()),
-            Span::raw(format!(":{capture_key}  ")),
-            Span::styled("/", Style::default().fg(Color::Yellow).bold()),
-            Span::raw(":Filter  "),
-            Span::styled("s", Style::default().fg(Color::Yellow).bold()),
-            Span::raw(":Stream  "),
-            Span::styled("b", Style::default().fg(Color::Yellow).bold()),
-            Span::raw(":BPF  "),
-            Span::styled("w", Style::default().fg(Color::Yellow).bold()),
-            Span::raw(":Save  "),
-            Span::styled("f", Style::default().fg(Color::Yellow).bold()),
-            Span::raw(":Follow  "),
-            Span::styled("m", Style::default().fg(Color::Yellow).bold()),
-            Span::raw(":Bookmark  "),
-            Span::styled("n/N", Style::default().fg(Color::Yellow).bold()),
-            Span::raw(":Next/Prev  "),
-            Span::styled("W", Style::default().fg(Color::Yellow).bold()),
-            Span::raw(":Whois  "),
-            Span::styled("p", Style::default().fg(Color::Yellow).bold()),
-            Span::raw(":Pause  "),
-            Span::styled("r", Style::default().fg(Color::Yellow).bold()),
-            Span::raw(":Refresh  "),
-            Span::styled("1-8", Style::default().fg(Color::Yellow).bold()),
-            Span::raw(":Tab  "),
-            Span::styled("g", Style::default().fg(Color::Yellow).bold()),
-            Span::raw(":Geo  "),
-            Span::styled("?", Style::default().fg(Color::Yellow).bold()),
-            Span::raw(":Help"),
-            follow_indicator,
-        ]
-    };
-    hints.extend(filter_indicator);
-
-    let footer = Paragraph::new(Line::from(hints))
-    .block(
-        Block::default()
-            .borders(Borders::TOP)
-            .border_style(Style::default().fg(Color::DarkGray)),
-    );
-    f.render_widget(footer, area);
+    crate::ui::widgets::render_footer(f, area, hints);
 }
 
 fn protocol_color(proto: &str) -> Style {

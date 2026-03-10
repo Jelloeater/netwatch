@@ -1,6 +1,7 @@
 use std::time::Instant;
 
 use crate::app::App;
+use crate::ui::widgets;
 use crate::collectors::connections::TrackedConnection;
 use ratatui::{
     prelude::*,
@@ -23,29 +24,16 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
     render_chart(f, app, chunks[1]);
     render_legend(f, chunks[2]);
     render_summary(f, app, chunks[3]);
-    render_footer(f, chunks[4]);
+    render_footer(f, app, chunks[4]);
 }
 
 fn render_header(f: &mut Frame, app: &App, area: Rect) {
-    let now = chrono::Local::now().format("%H:%M:%S").to_string();
     let window_label = app.timeline_window.label();
-    let header = Paragraph::new(Line::from(vec![
-        Span::styled(" NetWatch ", Style::default().fg(Color::Cyan).bold()),
-        Span::raw("│ "),
-        Span::raw("[1] Dashboard  [2] Connections  [3] Interfaces  [4] Packets  [5] Stats  [6] Topology  "),
-        Span::styled("[7] Timeline", Style::default().fg(Color::Yellow).bold()),
-        Span::raw("  [8] Insights"),
-        Span::raw("  │ "),
+    let extra = vec![
+        Span::raw("  "),
         Span::styled(format!("last {}", window_label), Style::default().fg(Color::Green)),
-        Span::raw("  │ "),
-        Span::styled(now, Style::default().fg(Color::DarkGray)),
-    ]))
-    .block(
-        Block::default()
-            .borders(Borders::BOTTOM)
-            .border_style(Style::default().fg(Color::DarkGray)),
-    );
-    f.render_widget(header, area);
+    ];
+    widgets::render_header_with_extra(f, app, area, extra);
 }
 
 fn render_chart(f: &mut Frame, app: &App, area: Rect) {
@@ -241,35 +229,16 @@ fn render_summary(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(summary, area);
 }
 
-fn render_footer(f: &mut Frame, area: Rect) {
-    let footer = Paragraph::new(Line::from(vec![
-        Span::styled(" q", Style::default().fg(Color::Yellow).bold()),
-        Span::raw(":Quit  "),
-        Span::styled("a", Style::default().fg(Color::Yellow).bold()),
-        Span::raw(":Analyze  "),
-        Span::styled("↑↓", Style::default().fg(Color::Yellow).bold()),
-        Span::raw(":Scroll  "),
+fn render_footer(f: &mut Frame, _app: &App, area: Rect) {
+    let hints = vec![
         Span::styled("Enter", Style::default().fg(Color::Yellow).bold()),
         Span::raw(":→Connections  "),
         Span::styled("t", Style::default().fg(Color::Yellow).bold()),
         Span::raw(":Timespan  "),
         Span::styled("p", Style::default().fg(Color::Yellow).bold()),
-        Span::raw(":Pause  "),
-        Span::styled("r", Style::default().fg(Color::Yellow).bold()),
-        Span::raw(":Refresh  "),
-        Span::styled("1-8", Style::default().fg(Color::Yellow).bold()),
-        Span::raw(":Tab  "),
-        Span::styled("g", Style::default().fg(Color::Yellow).bold()),
-        Span::raw(":Geo  "),
-        Span::styled("?", Style::default().fg(Color::Yellow).bold()),
-        Span::raw(":Help"),
-    ]))
-    .block(
-        Block::default()
-            .borders(Borders::TOP)
-            .border_style(Style::default().fg(Color::DarkGray)),
-    );
-    f.render_widget(footer, area);
+        Span::raw(":Pause"),
+    ];
+    widgets::render_footer(f, area, hints);
 }
 
 fn extract_ip(addr: &str) -> String {
