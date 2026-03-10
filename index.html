@@ -129,7 +129,7 @@ section{padding:100px 24px;position:relative}
 .install-card{background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:28px;transition:all .3s}
 .install-card:hover{border-color:var(--border-glow)}
 .install-card h3{font-family:'Fira Code',monospace;font-size:.95rem;color:var(--text-bright);margin-bottom:16px}
-.install-cmd{font-family:'Fira Code',monospace;font-size:.82rem;background:#000;border:1px solid var(--border);border-radius:4px;padding:14px 18px;color:var(--green);position:relative;cursor:pointer}
+.install-cmd{font-family:'Fira Code',monospace;font-size:.82rem;background:#000;border:1px solid var(--border);border-radius:4px;padding:14px 18px;color:var(--green);position:relative;cursor:pointer;overflow-wrap:break-word;word-break:break-all}
 .install-cmd .prompt-char{color:var(--text-dim)}
 .install-cmd:hover{border-color:var(--green-dim)}
 .install-note{font-size:.78rem;color:var(--text-dim);margin-top:12px}
@@ -582,7 +582,8 @@ Model: llama3.2 │ Analysis: 2.3s │ a:Analyze</div>
         <h3>From source</h3>
         <div class="install-cmd" onclick="copyCmd(this)">
           <span class="prompt-char">$</span> git clone https://github.com/matthart1983/netwatch.git<br>
-          <span class="prompt-char">$</span> cd netwatch && cargo build --release
+          <span class="prompt-char">$</span> cd netwatch<br>
+          <span class="prompt-char">$</span> cargo build --release
         </div>
         <p class="install-note">Binary at ./target/release/netwatch</p>
       </div>
