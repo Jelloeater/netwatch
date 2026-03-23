@@ -7,34 +7,77 @@ Set Height 800
 Set Theme "Catppuccin Mocha"
 Set TypingSpeed 50ms
 
-Type "sudo ./target/release/netwatch"
+Type "sudo netwatch"
 Enter
 Sleep 5s
+Type "bmw1Series"
+Enter
+# Dashboard - live interface stats, bandwidth graphs, health probes, heatmap
+Sleep 4s
 
-# Dashboard - live interface stats, bandwidth, health
-Sleep 3s
+# Cycle themes from Dashboard: dark -> light -> solarized -> dracula -> nord
+Type "t"
+Sleep 2s
+Type "t"
+Sleep 2s
+Type "t"
+Sleep 2s
+Type "t"
+Sleep 2s
 
-# Connections tab
+# Back to default dark theme
+Type "t"
+Sleep 2s
+
+# Open Settings menu with ','
+Type ","
+Sleep 2s
+
+# Navigate theme selector with arrow keys
+Right
+Sleep 1s
+Right
+Sleep 1s
+Left
+Sleep 1s
+
+# Close settings
+Escape
+Sleep 2s
+
+# Connections tab - latency sparklines & RTT trend column
 Type "2"
-Sleep 3s
+Sleep 4s
+
+# Scroll through connections
+Down
+Sleep 500ms
+Down
+Sleep 500ms
+Down
+Sleep 500ms
+Up
+Sleep 500ms
+Up
+Sleep 2s
 
 # Interfaces tab
 Type "3"
 Sleep 3s
 
-# Packets tab
+# Packets tab with capture
 Type "4"
 Sleep 2s
 
 # Start packet capture
 Type "c"
-Sleep 6s
+Sleep 5s
 
 # Scroll through captured packets
 Down
-Sleep 1s
+Sleep 500ms
 Down
-Sleep 1s
+Sleep 500ms
 Down
 Sleep 1s
 
@@ -42,11 +85,7 @@ Sleep 1s
 Enter
 Sleep 3s
 
-# Open stream view for selected packet
-Type "s"
-Sleep 3s
-
-# Close stream view
+# Back out of detail
 Escape
 Sleep 1s
 
@@ -66,17 +105,23 @@ Sleep 3s
 Type "7"
 Sleep 3s
 
-# Insights tab - AI analysis with minimax cloud
+# Insights tab - trigger AI analysis
 Type "8"
 Sleep 2s
-
-# Trigger on-demand AI analysis
 Type "a"
-Sleep 12s
+Sleep 15s
 
-# Back to Dashboard
-Type "1"
-Sleep 3s
+# Processes tab - per-process bandwidth
+Type "9"
+Sleep 4s
+
+# Scroll through processes
+Down
+Sleep 500ms
+Down
+Sleep 500ms
+Up
+Sleep 2s
 
 # Show help overlay
 Type "?"
