@@ -462,6 +462,7 @@ fn parse_windows_connections() -> Vec<Connection> {
             state: rc.state,
             process_name: rc.pid.and_then(|p| pid_names.get(&p).cloned()),
             pid: rc.pid,
+            kernel_rtt_us: None,
         })
         .collect()
 }
