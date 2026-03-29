@@ -2,7 +2,6 @@ use crate::collectors::config::ConfigCollector;
 use crate::collectors::connections::{Connection, ConnectionCollector, ConnectionTimeline};
 use crate::collectors::geo::GeoCache;
 use crate::collectors::health::HealthProber;
-use crate::collectors::insights::{InsightsCollector, NetworkSnapshot};
 use crate::collectors::network_intel::{
     ConnAttemptEvent, InterfaceRateEvent, NetworkIntelCollector,
 };
@@ -81,7 +80,6 @@ pub enum Tab {
     Stats,
     Topology,
     Timeline,
-    Insights,
     Processes,
 }
 
@@ -128,9 +126,6 @@ pub struct App {
     pub connection_timeline: ConnectionTimeline,
     pub timeline_scroll: usize,
     pub timeline_window: TimelineWindow,
-    pub insights_collector: InsightsCollector,
-    pub insights_scroll: usize,
-    insights_tick: u32,
     pub network_intel: NetworkIntelCollector,
     intel_last_pkt_id: u64,
     pub ebpf_status: EbpfStatus,
@@ -226,9 +221,6 @@ impl App {
             connection_timeline: ConnectionTimeline::new(),
             timeline_scroll: 0,
             timeline_window: user_config.timeline_window_enum(),
-            insights_collector: InsightsCollector::new(&user_config.insights_model),
-            insights_scroll: 0,
-            insights_tick: 0,
             network_intel,
             intel_last_pkt_id: 0,
             ebpf_status: Self::init_ebpf_status(),
@@ -390,29 +382,6 @@ impl App {
             self.health_prober.probe(gateway.as_deref(), dns.as_deref());
         }
 
-        // Submit network snapshot for AI analysis every ~15 ticks (15s)
-        self.insights_tick += 1;
-        if self.insights_tick >= 15 {
-            self.insights_tick = 0;
-            self.submit_insights_snapshot();
-        }
-    }
-
-    fn submit_insights_snapshot(&self) {
-        let packets = self.packet_collector.get_packets();
-        if packets.is_empty() {
-            return;
-        }
-        let conns = self.connection_collector.connections.lock().unwrap();
-        let health = self.health_prober.status.lock().unwrap();
-        let rx_rate = crate::ui::widgets::format_bytes_rate(
-            self.traffic.interfaces.iter().map(|i| i.rx_rate).sum(),
-        );
-        let tx_rate = crate::ui::widgets::format_bytes_rate(
-            self.traffic.interfaces.iter().map(|i| i.tx_rate).sum(),
-        );
-        let snapshot = NetworkSnapshot::build(&packets, &conns, &health, &rx_rate, &tx_rate);
-        self.insights_collector.submit_snapshot(snapshot);
     }
 
     fn sample_rtt_from_streams(&mut self) {
@@ -574,7 +543,6 @@ pub async fn run<B: Backend>(terminal: &mut Terminal<B>) -> Result<()> {
                 Tab::Stats => ui::stats::render(f, &app, area),
                 Tab::Topology => ui::topology::render(f, &app, area),
                 Tab::Timeline => ui::timeline::render(f, &app, area),
-                Tab::Insights => ui::insights::render(f, &app, area),
                 Tab::Processes => ui::processes::render(f, &app, area),
             }
             if app.show_help {
@@ -767,11 +735,6 @@ pub async fn run<B: Backend>(terminal: &mut Terminal<B>) -> Result<()> {
                         app.show_help = !app.show_help;
                         app.help_scroll = 0;
                     }
-                    KeyCode::Char('a')
-                        if !(app.current_tab == Tab::Packets && app.stream_view_open) =>
-                    {
-                        app.submit_insights_snapshot();
-                    }
                     KeyCode::Char('g') => app.show_geo = !app.show_geo,
                     KeyCode::Char('t') if app.current_tab != Tab::Timeline => {
                         let names = crate::theme::THEME_NAMES;
@@ -803,8 +766,7 @@ pub async fn run<B: Backend>(terminal: &mut Terminal<B>) -> Result<()> {
                     KeyCode::Char('5') => app.current_tab = Tab::Stats,
                     KeyCode::Char('6') => app.current_tab = Tab::Topology,
                     KeyCode::Char('7') => app.current_tab = Tab::Timeline,
-                    KeyCode::Char('8') => app.current_tab = Tab::Insights,
-                    KeyCode::Char('9') => app.current_tab = Tab::Processes,
+                    KeyCode::Char('8') => app.current_tab = Tab::Processes,
                     // Stream view controls (intercept before other Packets keys)
                     KeyCode::Esc if app.current_tab == Tab::Packets && app.stream_view_open => {
                         app.stream_view_open = false;
@@ -1205,9 +1167,6 @@ pub async fn run<B: Backend>(terminal: &mut Terminal<B>) -> Result<()> {
                         Tab::Timeline => {
                             app.timeline_scroll = app.timeline_scroll.saturating_sub(1);
                         }
-                        Tab::Insights => {
-                            app.insights_scroll = app.insights_scroll.saturating_sub(1);
-                        }
                         Tab::Processes => {
                             app.process_scroll = app.process_scroll.saturating_sub(1);
                         }
@@ -1258,9 +1217,6 @@ pub async fn run<B: Backend>(terminal: &mut Terminal<B>) -> Result<()> {
                         }
                         Tab::Timeline => {
                             app.timeline_scroll += 1;
-                        }
-                        Tab::Insights => {
-                            app.insights_scroll += 1;
                         }
                         Tab::Processes => {
                             let max = app.process_bandwidth.ranked().len().saturating_sub(1);
@@ -1372,9 +1328,6 @@ fn handle_mouse(app: &mut App, mouse: crossterm::event::MouseEvent) {
                             app.timeline_scroll = clicked_row - 1;
                         }
                     }
-                    Tab::Insights => {
-                        app.insights_scroll = clicked_row;
-                    }
                     Tab::Processes => {
                         if clicked_row > 0 {
                             let visible_row = clicked_row - 1;
@@ -1420,9 +1373,6 @@ fn handle_mouse(app: &mut App, mouse: crossterm::event::MouseEvent) {
                 }
                 Tab::Timeline => {
                     app.timeline_scroll = app.timeline_scroll.saturating_sub(3);
-                }
-                Tab::Insights => {
-                    app.insights_scroll = app.insights_scroll.saturating_sub(3);
                 }
                 Tab::Processes => {
                     app.process_scroll = app.process_scroll.saturating_sub(3);
@@ -1479,9 +1429,6 @@ fn handle_mouse(app: &mut App, mouse: crossterm::event::MouseEvent) {
                 }
                 Tab::Timeline => {
                     app.timeline_scroll += 3;
-                }
-                Tab::Insights => {
-                    app.insights_scroll += 3;
                 }
                 Tab::Processes => {
                     let max = app.process_bandwidth.ranked().len().saturating_sub(1);

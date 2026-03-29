@@ -36,7 +36,6 @@ const ALL_TABS: &[Tab] = &[
     Tab::Stats,
     Tab::Topology,
     Tab::Timeline,
-    Tab::Insights,
     Tab::Processes,
 ];
 
@@ -49,8 +48,7 @@ fn tab_label(tab: Tab) -> (&'static str, &'static str) {
         Tab::Stats => ("5", "Stats"),
         Tab::Topology => ("6", "Topology"),
         Tab::Timeline => ("7", "Timeline"),
-        Tab::Insights => ("8", "Insights"),
-        Tab::Processes => ("9", "Processes"),
+        Tab::Processes => ("8", "Processes"),
     }
 }
 
@@ -190,7 +188,7 @@ mod tests {
                 found_tabs.insert(format!("{:?}", tab));
             }
         }
-        assert_eq!(found_tabs.len(), 9);
+        assert_eq!(found_tabs.len(), 8);
     }
 
     #[test]
@@ -225,7 +223,7 @@ pub fn render_footer(f: &mut Frame, app: &App, area: Rect, context_hints: Vec<Sp
     let standard_hints: &[(&str, &str)] = &[
         ("q", "Quit"),
         ("↑↓", "Scroll"),
-        ("1-9", "Tab"),
+        ("1-8", "Tab"),
         ("?", "Help"),
     ];
     for (i, (key, desc)) in standard_hints.iter().enumerate() {

@@ -16,8 +16,10 @@ async fn main() -> Result<()> {
     if args.iter().any(|a| a == "--generate-config") {
         let cfg = NetwatchConfig::default();
         cfg.save()?;
-        let path = NetwatchConfig::path().unwrap();
-        println!("Config written to {}", path.display());
+        match NetwatchConfig::path() {
+            Some(path) => println!("Config written to {}", path.display()),
+            None => println!("Config written (could not determine path)"),
+        }
         return Ok(());
     }
 

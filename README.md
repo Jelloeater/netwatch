@@ -1,472 +1,259 @@
-# NetWatch
-
-**Real-time network diagnostics in your terminal — like htop for your network.**
-
-NetWatch is a lightweight, keyboard-driven TUI application that gives you instant visibility into network traffic, active connections, interface health, live packet capture with deep protocol inspection, network topology mapping, connection timelines, and AI-powered network insights. Built with Rust for speed and low overhead.
-
-![Rust](https://img.shields.io/badge/Rust-000000?logo=rust&logoColor=white)
-![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-blue)
-![License](https://img.shields.io/badge/license-MIT-green)
-[![Wiki](https://img.shields.io/badge/docs-Wiki-blue?logo=github)](https://github.com/matthart1983/netwatch/wiki)
-
----
-
-## Demo
-
 <p align="center">
-  <img src="demo.gif" alt="NetWatch demo — Dashboard, Connections, Interfaces, and Help overlay" width="800">
+  <h1 align="center">NetWatch</h1>
+  <p align="center">
+    <strong>Real-time network diagnostics in your terminal. One command, zero config, instant visibility.</strong>
+  </p>
+  <p align="center">
+    <a href="https://crates.io/crates/netwatch-tui"><img src="https://img.shields.io/crates/v/netwatch-tui.svg" alt="crates.io"></a>
+    <a href="https://github.com/matthart1983/netwatch/releases"><img src="https://img.shields.io/github/v/release/matthart1983/netwatch" alt="Release"></a>
+    <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux-blue" alt="Platform">
+    <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
+    <a href="https://github.com/matthart1983/netwatch/wiki"><img src="https://img.shields.io/badge/docs-Wiki-blue?logo=github" alt="Wiki"></a>
+  </p>
 </p>
 
-> Dashboard with live interface stats, bandwidth graphs, top connections, health probes, and latency heatmap. Packet capture with deep protocol inspection available when run with `sudo`.
+<p align="center">
+  <img src="demo.gif" alt="NetWatch — Dashboard, Connections, Packets, Topology" width="800">
+</p>
 
----
-
-## Features
-
-- **Live interface monitoring** — RX/TX rates, totals, and 60-second sparkline history for every network interface
-- **Aggregate bandwidth graph** — Full-width RX/TX sparklines across all active interfaces on the Dashboard
-- **Active connections** — Every open socket with process name, PID, protocol, state, and addresses (sortable)
-- **Network health** — ICMP ping probes to gateway and DNS with RTT and packet loss
-- **Latency heatmap** — Color-coded RTT history for gateway and DNS on the Dashboard
-- **Packet capture** — Wireshark-style live capture with deep protocol decoding:
-  - **DNS** — Query names, types (A, AAAA, CNAME…), response codes
-  - **TLS** — Handshake type, version, SNI hostname extraction
-  - **HTTP** — Method, path, and response status lines
-  - **ICMP** — Human-readable type/code (Echo Request, Dest Unreachable, TTL Exceeded…)
-  - **ARP, DHCP, NTP, mDNS** — Decoded with meaningful summaries
-  - **TCP payload** — Readable text content extracted and displayed
-  - **25+ service labels** — Ports mapped to names (SSH, HTTPS, PostgreSQL, Redis…)
-- **TCP stream reassembly** — Follow TCP/UDP conversations with text and hex views
-- **TCP handshake timing** — Automatic SYN→SYN-ACK→ACK latency measurement per connection
-- **Display filters** — Wireshark-style filter bar with protocol, IP, port, stream, text search, and/or/not combinators
-- **BPF capture filters** — Set Berkeley Packet Filter expressions applied at capture time
-- **Expert info & coloring** — Automatic severity classification (Error/Warn/Note/Chat) with color-coded rows
-- **Packet bookmarks** — Mark packets of interest, jump between bookmarks
-- **PCAP export** — Save captured packets (or filtered subset) to standard .pcap files
-- **Protocol statistics** — Protocol hierarchy table with packet counts, byte totals, and distribution bars
-- **Handshake histogram** — Latency distribution chart with min/avg/median/p95/max stats
-- **GeoIP location** — Background IP geolocation with country, city, and org display
-- **Whois lookup** — On-demand RDAP whois for any IP address
-- **Connection → packet linking** — Jump from a connection to filtered packet view
-- **Help overlay** — Full scrollable keybinding reference with filter syntax and expert legend
-- **Network config** — Default gateway, DNS servers, hostname at a glance
-- **Cross-platform** — macOS, Linux, and Windows with platform-specific collectors
-- **Network topology** — ASCII box diagram showing local machine, gateway, DNS servers, and top remote hosts with connection counts and health indicators
-- **Traceroute** — Built-in hop-by-hop traceroute from Topology or Connections tab. Press `T` on any remote host to see the full path with color-coded RTT per hop
-- **Connection timeline** — Gantt-style bar chart of connection lifetimes, color-coded by state with adjustable time windows (30s to 1h)
-- **AI network insights** — Real-time AI analysis via Ollama (llama3.2). Auto-analyzes every 15s, on-demand with `a` key. Detects security concerns, performance issues, and anomalies
-- **Theming engine** — 5 built-in color themes (dark, light, solarized, dracula, nord) with instant switching via `t` key. All UI uses semantic color roles
-- **Settings menu** — Press `,` for live configuration editing with TOML persistence. Theme, refresh rate, default tab, capture interface, and more
-- **Persistent configuration** — TOML config file in platform-specific directory. Saves theme, default tab, refresh rate, BPF filter, alert thresholds, and all preferences
-- **Offline GeoIP** — MaxMind .mmdb database support for offline IP geolocation with automatic online fallback to ip-api.com
-- **Mouse support** — Clickable header tabs, scroll wheel navigation in all lists and overlays, click-to-select for table rows
-- **Latency sparklines** — Per-connection RTT trend using Unicode block characters derived from TCP handshake timings
-- **RTT trend column** — Color-coded sparkline history in the Connections tab showing per-connection latency over time
+<p align="center">
+  <em>Launch → see every interface, connection, and health probe instantly. No setup required.</em>
+</p>
 
 ---
 
 ## Install
 
-### Homebrew (macOS/Linux)
-
 ```bash
+# Homebrew (macOS / Linux)
 brew install matthart1983/tap/netwatch
+
+# Cargo
+cargo install netwatch-tui
+
+# Pre-built binaries — see Releases
 ```
 
-### Pre-built binaries
-
-Download the latest binary for your platform from [GitHub Releases](https://github.com/matthart1983/netwatch/releases/latest):
+<details>
+<summary><strong>All platforms & options</strong></summary>
 
 | Platform | Download |
 |----------|----------|
-| Linux (x86_64) | `netwatch-linux-x86_64.tar.gz` |
-| Linux (aarch64) | `netwatch-linux-aarch64.tar.gz` |
-| macOS (Intel) | `netwatch-macos-x86_64.tar.gz` |
-| macOS (Apple Silicon) | `netwatch-macos-aarch64.tar.gz` |
-| Windows (x86_64) | `netwatch-windows-x86_64.exe.zip` |
+| Linux (x86_64) | [`netwatch-linux-x86_64.tar.gz`](https://github.com/matthart1983/netwatch/releases/latest) |
+| Linux (aarch64) | [`netwatch-linux-aarch64.tar.gz`](https://github.com/matthart1983/netwatch/releases/latest) |
+| macOS (Intel) | [`netwatch-macos-x86_64.tar.gz`](https://github.com/matthart1983/netwatch/releases/latest) |
+| macOS (Apple Silicon) | [`netwatch-macos-aarch64.tar.gz`](https://github.com/matthart1983/netwatch/releases/latest) |
+
+**From source:**
 
 ```bash
-# Example: macOS Apple Silicon
-curl -LO https://github.com/matthart1983/netwatch/releases/latest/download/netwatch-macos-aarch64.tar.gz
-tar xzf netwatch-macos-aarch64.tar.gz
-sudo mv netwatch-macos-aarch64 /usr/local/bin/netwatch
-```
-
-### From crates.io
-
-```bash
-cargo install netwatch-tui
-```
-
-### From source
-
-```bash
-git clone https://github.com/matthart1983/netwatch.git
-cd netwatch
+git clone https://github.com/matthart1983/netwatch.git && cd netwatch
 cargo build --release
 ```
 
-### Prerequisites
+**Prerequisites:** Rust 1.70+, libpcap (`sudo apt install libpcap-dev` on Linux, included on macOS)
 
-- **Rust** toolchain (1.70+): https://rustup.rs
-- **libpcap** (for packet capture):
-  - macOS: included with Xcode Command Line Tools
-  - Linux: `sudo apt install libpcap-dev` (Debian/Ubuntu) or `sudo dnf install libpcap-devel` (Fedora)
-  - Windows: install [Npcap](https://npcap.com/) with "Install Npcap in WinPcap API-compatible Mode" checked
+</details>
 
-### Run
+## Quick Start
 
 ```bash
-# Basic mode — interface stats, connections, config
-netwatch
-
-# Full mode — adds health probes + packet capture (requires root for BPF/ICMP)
-sudo netwatch
+netwatch            # Interface stats, connections, config
+sudo netwatch       # Full mode — adds health probes + packet capture
 ```
 
 ---
 
-## Tabs
+## Why NetWatch?
 
-NetWatch has eight tabs, switched with number keys `1`–`8`:
+Most network tools make you choose: **see what's happening** (iftop, bandwhich) or **inspect packets** (Wireshark, tshark). NetWatch does both in a single terminal — from a 10,000-foot dashboard view down to individual packet bytes.
 
-### `1` Dashboard
+| What you get | How fast |
+|---|---|
+| Every interface with live RX/TX sparklines | **Instant** |
+| Every connection with process name + PID | **Instant** |
+| Gateway & DNS health with latency heatmap | **Instant** |
+| Wireshark-style packet capture + decode | One keypress |
+| Network topology map with traceroute | One keypress |
+| PCAP export for offline analysis | One keypress |
 
-The default view. Everything at a glance:
+**No config files. No setup. No flags required.**
 
-- **Interfaces** — All network interfaces with live RX/TX rates and UP/DOWN status
-- **Bandwidth graph** — Full-width aggregate RX/TX sparklines across all active interfaces (last 60s)
-- **Top connections** — The 5 most active established connections
-- **Health** — Gateway and DNS latency with packet loss percentage
-- **Latency heatmap** — Color-coded RTT history bars for gateway and DNS (green→yellow→orange→red)
+---
 
-### `2` Connections
+## Features
 
-Full scrollable list of every active network socket:
+### 🖥️ Dashboard
+Everything at a glance — interfaces, aggregate bandwidth graph, top connections, gateway/DNS health probes, and a color-coded latency heatmap. Useful in 5 seconds.
 
-| Process | PID | Proto | State | Local Address | Remote Address | Location |
-|---------|-----|-------|-------|---------------|----------------|----------|
-| firefox | 1234 | TCP | ESTABLISHED | 192.168.1.42:54321 | 142.250.1.1:443 | US Mountain View, Google |
+### 🔌 Connections
+Every open socket with **process name**, PID, protocol, state, remote address, GeoIP location, and per-connection **latency sparklines**. Sort by any column, jump to filtered packet view.
 
-- Press `s` to cycle the sort column
-- Press `Enter` to jump to Packets tab with a filter matching the selected connection
-- Press `W` for whois lookup on the remote IP
-- Press `g` to toggle GeoIP location column
+### 📡 Interfaces
+Per-interface detail: IPv4/IPv6 addresses, MAC, MTU, total RX/TX with individual sparkline history, errors, and drops.
 
-Each connection shows a **latency sparkline** (Unicode block characters from TCP handshake timings) and a color-coded **RTT trend** column.
+### 📦 Packet Capture
+Live capture with deep protocol decoding — **DNS** (queries, types, response codes), **TLS** (version, SNI), **HTTP** (method, path, status), **ICMP**, **ARP**, **DHCP**, **NTP**, **mDNS**, and 25+ service labels. TCP stream reassembly, handshake timing, display filters, BPF capture filters, bookmarks, and PCAP export.
 
-### `3` Interfaces
+### 🗺️ Topology
+ASCII network map showing your machine, gateway, DNS servers, and top remote hosts with connection counts and color-coded health indicators. Built-in **traceroute** from any host.
 
-Detailed per-interface view with:
-- IPv4 and IPv6 addresses, MAC address, MTU
-- Total RX/TX bytes, packets, errors, and drops
-- Individual sparkline history per interface
+### 📊 Stats
+Protocol hierarchy table with packet counts, byte totals, and distribution bars. TCP handshake histogram with min/avg/median/p95/max.
 
-### `4` Packets
+### ⏱️ Timeline
+Gantt-style connection timeline — when each connection was active, color-coded by TCP state. Adjustable windows from 30 seconds to 1 hour.
 
-Live packet capture with Wireshark-style protocol inspection:
+---
 
-- **Packet list** — Scrollable table with expert severity indicator, stream index, protocol coloring
-- **Protocol detail** — Layer-by-layer decode (Ethernet → IP → TCP/UDP → Application)
-- **GeoIP & Whois** — Location and network ownership in the detail pane
-- **Handshake timing** — `⏱ SYN→SYN-ACK: 5.2ms │ SYN-ACK→ACK: 3.1ms │ Total: 8.3ms`
-- **Payload content** — Readable text extracted from application data
-- **Hex/ASCII dump** — Raw packet bytes with side-by-side hex and ASCII
-- **Stream view** — Press `s` to follow the TCP/UDP conversation with direction arrows
-- **Bookmarks** — Press `m` to mark packets, `n`/`N` to jump between them
+## Display Filters
 
-**Decoded protocols:**
+Wireshark-style filter syntax in the Packets tab:
 
-| Protocol | What's shown |
-|----------|-------------|
-| DNS | Query/Response, domain name, record type (A, AAAA, MX…), response code |
-| TLS | Client Hello / Server Hello, TLS version, SNI hostname |
-| HTTP | Full request line (method, path, version) or response status |
-| ICMP | Echo Request/Reply, Dest Unreachable (with reason), TTL Exceeded |
-| ARP | "Who has 192.168.1.1? Tell 192.168.1.42" |
-| DHCP | Discover/Offer/Request/ACK |
-| NTP | Version and mode (Client/Server/Broadcast) |
-
-### `5` Stats
-
-Protocol statistics and performance analysis:
-
-- **Protocol hierarchy** — Table of all seen protocols with packet counts, byte totals, percentages, and distribution bars
-- **Handshake histogram** — TCP handshake latency distribution across 7 buckets (<1ms to >500ms) with min/avg/median/p95/max summary
-
-### `6` Topology
-
-ASCII network topology map showing your machine's network neighbourhood:
-
-- **Local machine** — Hostname, active interfaces, aggregate bandwidth
-- **Infrastructure** — Gateway and DNS servers with health indicators (RTT, loss)
-- **Remote hosts** — Top destinations sorted by connection count, with process names
-- **Health dots** — Color-coded `●` indicators (green/yellow/red) for latency and loss
-- **Traceroute** — Press `T` on a selected host to run a traceroute overlay showing each hop with RTT
-- Press `Enter` to jump to Connections tab filtered to the selected host
-
-### `7` Timeline
-
-Gantt-style connection timeline showing when connections were active:
-
-- **Horizontal bars** — Each row is a connection (process + remote), bar spans first-seen to last-seen
-- **Color-coded** — Green (ESTABLISHED), Yellow (LISTEN), Cyan (SYN), Red (closing states)
-- **Time windows** — Press `t` to cycle: 30s, 1m, 5m, 15m, 1h
-- Press `Enter` to jump to Connections tab for the selected entry
-
-### `8` Insights
-
-AI-powered network analysis via local Ollama:
-
-- **Auto-analysis** — Sends network snapshots to Ollama every 15 seconds
-- **On-demand** — Press `a` from any tab for immediate analysis
-- **Detects** — Security concerns, performance issues, anomalies, connection health
-- **Graceful fallback** — Shows setup instructions if Ollama is unavailable
-- Uses `llama3.2` model by default
+```
+tcp                        # Protocol
+192.168.1.42               # IP address (src or dst)
+ip.src == 10.0.0.1         # Directional
+port 443                   # Port
+stream 7                   # Stream index
+contains "hello"           # Text search
+tcp and port 443           # Combinators
+!dns                       # Negation
+google                     # Bare word → contains "google"
+```
 
 ---
 
 ## Keyboard Controls
 
-### Global
-
 | Key | Action |
 |-----|--------|
-| `1`–`8` | Switch tab: Dashboard / Connections / Interfaces / Packets / Stats / Topology / Timeline / Insights |
-| `a` | Request AI analysis (from any tab) |
-| `↑` `↓` | Scroll / select |
-| `p` | Pause / resume all data collection |
-| `r` | Force refresh all data |
-| `g` | Toggle GeoIP location display |
-| `?` | Show help overlay |
-| `t` | Cycle color theme (dark / light / solarized / dracula / nord) |
-| `,` | Open settings menu |
-| `q` / `Ctrl+C` | Quit |
+| `1`–`7` | Switch tabs |
+| `↑` `↓` | Navigate |
+| `p` | Pause / resume |
+| `r` | Force refresh |
+| `/` | Filter (Packets) |
+| `c` | Start/stop capture (Packets) |
+| `s` | Sort / stream view |
+| `w` | Export to .pcap |
+| `T` | Traceroute |
+| `W` | Whois lookup |
+| `t` | Cycle theme |
+| `,` | Settings |
+| `?` | Help |
+| `q` | Quit |
 
-### Connections tab
+<details>
+<summary><strong>Full keybinding reference</strong></summary>
 
+### Connections
 | Key | Action |
 |-----|--------|
 | `s` | Cycle sort column |
-| `Enter` | Jump to Packets tab with auto-filter for selected connection |
-| `T` | Traceroute to selected connection's remote IP |
-| `W` | Whois lookup for selected connection's remote IP |
-| `Esc` | Close traceroute overlay |
+| `Enter` | Jump to Packets with connection filter |
+| `T` | Traceroute to remote IP |
+| `W` | Whois lookup |
+| `g` | Toggle GeoIP column |
 
-### Packets tab
-
+### Packets
 | Key | Action |
 |-----|--------|
-| `c` | Start / stop packet capture |
-| `i` | Cycle capture interface (while stopped) |
-| `b` | Set BPF capture filter (while stopped) |
-| `/` | Open display filter bar |
-| `Esc` | Clear display filter |
-| `Enter` | Select packet at cursor |
-| `s` | Open stream view for selected packet |
-| `w` | Export packets to .pcap file |
-| `f` | Toggle auto-follow (scroll to newest) |
-| `x` | Clear all captured packets |
-| `m` | Toggle bookmark on selected packet |
-| `n` / `N` | Jump to next / previous bookmark |
-| `W` | Whois lookup for selected packet's IPs |
+| `c` | Start/stop capture |
+| `i` | Cycle capture interface |
+| `b` | Set BPF capture filter |
+| `/` | Display filter |
+| `s` | Stream view |
+| `w` | Export .pcap |
+| `m` | Bookmark packet |
+| `n`/`N` | Next/prev bookmark |
+| `f` | Auto-follow |
 
-### Stream view (within Packets tab)
-
+### Stream View
 | Key | Action |
 |-----|--------|
-| `Esc` | Close stream view |
-| `↑` `↓` | Scroll stream content |
-| `→` `←` | Filter to A→B / B→A direction |
-| `a` | Show both directions |
-| `h` | Toggle hex / text mode |
+| `→` `←` | Filter A→B / B→A |
+| `a` | Both directions |
+| `h` | Toggle hex/text |
+| `Esc` | Close |
 
-### Topology tab
-
+### Topology
 | Key | Action |
 |-----|--------|
-| `↑` `↓` | Scroll through remote hosts |
-| `T` | Traceroute to selected remote host |
-| `Enter` | Jump to Connections tab for selected host |
-| `Esc` | Close traceroute overlay |
+| `T` | Traceroute to selected host |
+| `Enter` | Jump to Connections for host |
 
-### Timeline tab
-
+### Timeline
 | Key | Action |
 |-----|--------|
-| `↑` `↓` | Scroll through connections |
-| `t` | Cycle time window (30s / 1m / 5m / 15m / 1h) |
-| `Enter` | Jump to Connections tab for selected entry |
+| `t` | Cycle time window (30s–1h) |
+| `Enter` | Jump to Connections |
 
-### Insights tab
-
-| Key | Action |
-|-----|--------|
-| `a` | Trigger on-demand AI analysis |
-| `↑` `↓` | Scroll insights |
-
-### Display filter syntax
-
-| Filter | Example | Matches |
-|--------|---------|---------|
-| Protocol | `tcp`, `udp`, `dns`, `icmp`, `arp` | Protocol field match |
-| IP address | `192.168.1.42` | Source or destination IP |
-| Directional IP | `ip.src == 10.0.0.1` | Source IP only |
-| Port | `port 443` | Source or destination port |
-| Stream | `stream 7` | Stream index match |
-| Text search | `contains "hello"` | Search info, payload, IPs |
-| Negation | `!dns`, `not arp` | Invert match |
-| Combinators | `tcp and port 443`, `dns or icmp` | Logical AND / OR |
-| Bare word | `google` | Shorthand for `contains "google"` |
+</details>
 
 ---
 
 ## Permissions
 
-NetWatch works in two modes:
-
-| Feature | Without `sudo` | With `sudo` |
-|---------|---------------|-------------|
+| Feature | `netwatch` | `sudo netwatch` |
+|---------|:---:|:---:|
 | Interface stats & rates | ✅ | ✅ |
 | Active connections | ✅ | ✅ |
 | Network configuration | ✅ | ✅ |
-| Health probes (ICMP ping) | ❌ Shows N/A | ✅ |
-| Packet capture | ❌ Permission denied | ✅ |
-| AI insights (Ollama) | ✅ (if Ollama running) | ✅ (if Ollama running) |
+| Health probes (ICMP) | ❌ | ✅ |
+| Packet capture | ❌ | ✅ |
 
-The app degrades gracefully — features that require elevated privileges show a clear message rather than crashing.
-
-### macOS BPF permissions
-
-Packet capture on macOS requires access to `/dev/bpf*` devices, which are root-only by default. You have two options:
-
-1. **Run with sudo** (recommended for occasional use):
-   ```bash
-   sudo ./target/release/netwatch
-   ```
-
-2. **Open BPF devices** (persistent, for frequent use):
-   ```bash
-   sudo chmod 644 /dev/bpf*
-   ```
-   > ⚠️ This allows any user to capture packets. Resets on reboot.
+Degrades gracefully — features that need root show a clear message, never crash.
 
 ---
 
-## Project Structure
+## Themes
 
-```
-netwatch/
-├── Cargo.toml
-├── src/
-│   ├── main.rs                  # Entry point, terminal setup
-│   ├── app.rs                   # App state, event loop, tab management
-│   ├── event.rs                 # Keyboard & tick event handling
-│   ├── theme.rs                 # Theming engine, 5 built-in presets
-│   ├── config.rs                # TOML configuration persistence
-│   ├── ui/
-│   │   ├── dashboard.rs         # Dashboard composite view
-│   │   ├── connections.rs       # Connections table view
-│   │   ├── interfaces.rs        # Interface detail view
-│   │   ├── packets.rs           # Packet capture & inspection view
-│   │   ├── stats.rs             # Protocol statistics & handshake histogram
-│   │   ├── topology.rs          # Network topology map view
-│   │   ├── timeline.rs          # Connection timeline view
-│   │   ├── insights.rs          # AI network insights view
-│   │   ├── settings.rs          # Settings menu overlay
-│   │   ├── help.rs              # Scrollable help overlay
-│   │   └── widgets.rs           # Formatting helpers
-│   ├── collectors/
-│   │   ├── traffic.rs           # Interface RX/TX byte polling & rate calc
-│   │   ├── connections.rs       # Socket enumeration + PID mapping
-│   │   ├── config.rs            # Gateway, DNS, hostname discovery
-│   │   ├── health.rs            # ICMP ping probes + RTT history
-│   │   ├── packets.rs           # libpcap capture + protocol decoding + stream tracking
-│   │   ├── geo.rs               # Background GeoIP lookup (ip-api.com)
-│   │   ├── insights.rs          # AI insights via Ollama
-│   │   └── whois.rs             # Background RDAP whois lookup
-│   └── platform/
-│       ├── linux.rs             # Linux /proc, /sys collectors
-│       └── macos.rs             # macOS ifconfig, netstat collectors
-├── SPEC.md                      # Design specification
-└── README.md
-```
+5 built-in themes with instant switching via `t`:
+
+**Dark** (default) · **Light** · **Solarized** · **Dracula** · **Nord**
+
+All preferences persist to a TOML config file automatically.
 
 ---
 
 ## How It Works
 
-### Data Collection
-
-| Collector | Interval | Source (macOS) | Source (Linux) |
-|-----------|----------|----------------|----------------|
+| Collector | Interval | macOS | Linux |
+|-----------|:--------:|-------|-------|
 | Interface stats | 1s | `netstat -ib` | `/sys/class/net/*/statistics` |
-| Interface info | 10s | `ifconfig` | `/sys/class/net/*` + `ip addr` |
 | Connections | 2s | `lsof -i -n -P` | `/proc/net/tcp` + `/proc/*/fd` |
-| Config | 10s | `netstat -rn`, `scutil --dns` | `ip route`, `/etc/resolv.conf` |
-| Health | 5s | `ping -c 3 -t 1` | `ping -c 3 -W 1` |
+| Health probes | 5s | `ping` | `ping` |
 | Packets | Real-time | libpcap (BPF) | libpcap |
-| GeoIP | On-demand | MaxMind .mmdb (offline) / ip-api.com fallback | MaxMind .mmdb (offline) / ip-api.com fallback |
-| Whois | On-demand | rdap.org (HTTPS) | rdap.org (HTTPS) |
-
-### Packet Decoding Pipeline
+| GeoIP | On-demand | MaxMind .mmdb / ip-api.com | MaxMind .mmdb / ip-api.com |
 
 ```
 Raw bytes → Ethernet → IPv4/IPv6/ARP → TCP/UDP/ICMP → DNS/TLS/HTTP/DHCP/NTP
-                                            ↓
-                              Stream tracking (per 4-tuple)
-                              TCP handshake timing (SYN/SYN-ACK/ACK)
-                              Expert info classification
-                              Payload text extraction
+                                             ↓
+                               Stream tracking · Handshake timing
+                               Expert info · Payload extraction
 ```
 
 ---
 
-## Dependencies
+## Cloud Monitoring
 
-| Crate | Purpose |
-|-------|---------|
-| [ratatui](https://crates.io/crates/ratatui) | Terminal UI framework |
-| [crossterm](https://crates.io/crates/crossterm) | Cross-platform terminal manipulation |
-| [tokio](https://crates.io/crates/tokio) | Async runtime |
-| [pcap](https://crates.io/crates/pcap) | libpcap bindings for packet capture |
-| [nix](https://crates.io/crates/nix) | Unix system call wrappers |
-| [chrono](https://crates.io/crates/chrono) | Timestamps |
-| [anyhow](https://crates.io/crates/anyhow) | Error handling |
-| [ureq](https://crates.io/crates/ureq) | HTTP client (GeoIP, Whois, Ollama AI) |
-| [serde_json](https://crates.io/crates/serde_json) | JSON parsing (API responses) |
-| [toml](https://crates.io/crates/toml) / [serde](https://crates.io/crates/serde) | Configuration file parsing and serialization |
-| [maxminddb](https://crates.io/crates/maxminddb) | Offline GeoIP database (.mmdb) reader |
-| [directories](https://crates.io/crates/directories) | Platform-specific config/data directory paths |
+Need to monitor servers remotely? [**NetWatch Cloud**](https://github.com/matthart1983/netwatch-cloud) extends NetWatch with:
 
----
+- 🚀 Lightweight agent daemon (5MB, no root required)
+- 📊 Web dashboard with real-time charts
+- 🔔 Email + Slack alerts (host offline, packet loss, latency)
+- 📈 Historical metrics with 72h retention
 
-## Troubleshooting
-
-| Problem | Solution |
-|---------|----------|
-| `Permission denied` on packet capture | Run with `sudo` |
-| `BIOCPROMISC: operation not supported` | Interface doesn't support promiscuous mode — NetWatch falls back automatically |
-| Health shows `N/A` | ICMP ping requires root — run with `sudo` |
-| No connections listed | `lsof` (macOS) or `/proc` (Linux) access may be restricted |
-| Binary not found after build | Check `./target/release/netwatch` exists |
-| Blank screen | Ensure terminal supports 256 colors and is at least 80×24 |
-| GeoIP/Whois not loading | Requires internet access; results appear after a short delay |
-| AI insights shows "Ollama unavailable" | Install and start Ollama: `ollama serve`, then `ollama pull llama3.2` |
-| AI analysis is slow | Ollama runs locally — performance depends on your hardware. Consider a smaller model |
-| Theme not saving | Press `S` in settings menu to save. Config stored in platform config directory |
-| GeoIP showing "Unknown" | Download MaxMind GeoLite2-City.mmdb and configure path in settings |
+```bash
+# One-command agent setup
+netwatch-agent setup
+```
 
 ---
 
 ## Contributing
 
-1. Fork the repo
-2. Create a feature branch: `git checkout -b feature/my-feature`
-3. Make your changes and test with `cargo build --release`
-4. Submit a pull request
-
----
+Contributions welcome! Fork, branch, PR. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 

@@ -107,7 +107,6 @@ fn build_packets_header_line(app: &App, extra: Vec<Span<'static>>) -> Line<'stat
         ("5", "Stats", Tab::Stats),
         ("6", "Topology", Tab::Topology),
         ("7", "Timeline", Tab::Timeline),
-        ("8", "Insights", Tab::Insights),
     ];
     let mut spans: Vec<Span<'static>> = vec![Span::styled(
         "◉ NetWatch ",

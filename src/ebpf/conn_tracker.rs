@@ -45,7 +45,9 @@ impl ConnTracker {
     /// Start the async reader task that drains the perf event buffer.
     /// This should be called from within a tokio runtime.
     pub async fn start(&self, bpf: &mut Bpf) -> Result<(), anyhow::Error> {
-        let mut perf_array = AsyncPerfEventArray::try_from(bpf.map_mut("CONN_EVENTS").unwrap())?;
+        let map = bpf.map_mut("CONN_EVENTS")
+            .ok_or_else(|| anyhow::anyhow!("CONN_EVENTS map not found in BPF object"))?;
+        let mut perf_array = AsyncPerfEventArray::try_from(map)?;
         let events = Arc::clone(&self.events);
 
         for cpu_id in online_cpus()? {
@@ -56,7 +58,10 @@ impl ConnTracker {
                     .map(|_| BytesMut::with_capacity(std::mem::size_of::<ConnEvent>()))
                     .collect::<Vec<_>>();
                 loop {
-                    let event_count = buf.read_events(&mut buffers).await.unwrap();
+                    let event_count = match buf.read_events(&mut buffers).await {
+                        Ok(ev) => ev,
+                        Err(_) => continue,
+                    };
                     for i in 0..event_count.read {
                         if buffers[i].len() < std::mem::size_of::<ConnEvent>() {
                             continue;
