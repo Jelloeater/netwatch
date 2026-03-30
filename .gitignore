@@ -1,2 +1,7 @@
 /target
 /result
+*.DS_Store
+Roadmap*.md
+SPEC-*.md
+comparison.md
+demo-linkedin.*
