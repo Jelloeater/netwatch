@@ -45,7 +45,8 @@ impl ConnTracker {
     /// Start the async reader task that drains the perf event buffer.
     /// This should be called from within a tokio runtime.
     pub async fn start(&self, bpf: &mut Bpf) -> Result<(), anyhow::Error> {
-        let map = bpf.map_mut("CONN_EVENTS")
+        let map = bpf
+            .map_mut("CONN_EVENTS")
             .ok_or_else(|| anyhow::anyhow!("CONN_EVENTS map not found in BPF object"))?;
         let mut perf_array = AsyncPerfEventArray::try_from(map)?;
         let events = Arc::clone(&self.events);

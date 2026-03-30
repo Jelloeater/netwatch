@@ -381,7 +381,6 @@ impl App {
             let dns = self.config_collector.config.dns_servers.first().cloned();
             self.health_prober.probe(gateway.as_deref(), dns.as_deref());
         }
-
     }
 
     fn sample_rtt_from_streams(&mut self) {
