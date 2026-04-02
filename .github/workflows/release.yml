@@ -43,6 +43,17 @@ jobs:
       - name: Install cross-compilation dependencies (Linux aarch64)
         if: matrix.target == 'aarch64-unknown-linux-gnu'
         run: |
+          if ! grep -q '^Architectures: amd64$' /etc/apt/sources.list.d/ubuntu.sources; then
+            sudo sed -i '/^Signed-By:/i Architectures: amd64' /etc/apt/sources.list.d/ubuntu.sources
+          fi
+          cat <<'EOF' | sudo tee /etc/apt/sources.list.d/ubuntu-arm64.sources >/dev/null
+          Types: deb
+          URIs: http://ports.ubuntu.com/ubuntu-ports/
+          Suites: noble noble-updates noble-backports noble-security
+          Components: main universe restricted multiverse
+          Architectures: arm64
+          Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+          EOF
           sudo dpkg --add-architecture arm64
           sudo apt-get update
           sudo apt-get install -y gcc-aarch64-linux-gnu libpcap0.8-dev:arm64 pkg-config
