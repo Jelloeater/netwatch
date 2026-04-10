@@ -205,4 +205,8 @@ Call in `load()` and expose for tests.
 
 ## Done (archived)
 
-Nothing yet.
+- **#1 Split event loop** — `AppEvent::Key` arm reduced from 775 lines to 5. Handlers extracted: `handle_key`, `handle_help_key`, `handle_settings_key`, `handle_filter_input`, `handle_bpf_input`, `handle_main_key`. Also extracted `sort_connections()` and `top_remote_ips()` which were duplicated 3× inline.
+- **#2 TCP flag constants** — `TCP_FLAG_SYN/ACK/RST/FIN/PSH/URG` defined in `packets.rs`; all hex literals replaced.
+- **#3 Settings cursor enum** — `settings::cursor` module with named constants (`THEME`, `AI_INSIGHTS`, etc.); magic integers eliminated from app.rs and settings.rs.
+- **#9 Annotate packet capture constants** — inline comments added to `MAX_PACKETS`, `CAPTURE_SNAPLEN`, etc.
+- **#10 NetwatchConfig::validate()** — added; called from `load()`; clamps refresh rate, fills empty string defaults.
