@@ -353,7 +353,7 @@ fn analysis_loop(
                 let mut ins = insights.lock().unwrap();
                 ins.push(Insight {
                     timestamp,
-                    text: response,
+                    text: clean_insight_text(&response),
                 });
                 // Keep last 20 insights
                 if ins.len() > 20 {
@@ -373,6 +373,44 @@ fn analysis_loop(
 
         last_analysis = Instant::now();
     }
+}
+
+/// Strip markdown formatting that renders as literal noise in a TUI.
+/// Removes **bold**, *italic*, `code`, and ## headers; collapses blank lines.
+fn clean_insight_text(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut prev_blank = false;
+
+    for line in text.lines() {
+        // Strip leading markdown header markers (## Foo -> Foo)
+        let line = line.trim_start_matches('#').trim_start();
+
+        // Remove ** bold markers
+        let mut line = line.to_string();
+        line = line.replace("**", "");
+        // Remove backtick code markers
+        line = line.replace('`', "");
+        // Remove _italic_ but keep underscores mid-word by only stripping standalone _
+        // Simple: strip surrounding _ pairs
+        while line.starts_with('_') && line.ends_with('_') && line.len() > 2 {
+            line = line[1..line.len() - 1].to_string();
+        }
+
+        let line = line.trim_end();
+
+        if line.is_empty() {
+            if !prev_blank && !out.is_empty() {
+                out.push('\n');
+            }
+            prev_blank = true;
+        } else {
+            out.push_str(line);
+            out.push('\n');
+            prev_blank = false;
+        }
+    }
+
+    out.trim().to_string()
 }
 
 fn call_ollama(

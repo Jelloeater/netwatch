@@ -935,6 +935,10 @@ pub async fn run<B: Backend>(terminal: &mut Terminal<B>) -> Result<()> {
                     KeyCode::Char(',') => {
                         app.show_settings = !app.show_settings;
                         app.settings_editing = false;
+                        // Jump cursor to AI settings when opening from Insights tab
+                        if app.show_settings && app.current_tab == Tab::Insights {
+                            app.settings_cursor = 12;
+                        }
                     }
                     KeyCode::Char('p') => app.paused = !app.paused,
                     KeyCode::Char('r') => {
