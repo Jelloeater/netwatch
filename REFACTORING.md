@@ -1,0 +1,208 @@
+# Refactoring Roadmap
+
+Known opportunities to improve readability and maintainability. Contributions welcome — pick an item, open an issue to claim it, and reference this file in the PR.
+
+Items are grouped by impact (high → low). None of these change runtime behaviour.
+
+---
+
+## High impact
+
+### 1. Split `app.rs` event loop into focused handlers
+
+**Where:** `src/app.rs` lines ~723–1492  
+**Problem:** The keyboard event match arm is ~770 lines with deeply nested conditionals for filter input, settings, tab-specific controls, and global shortcuts. It's the single hardest place for new contributors to navigate.  
+**Fix:** Extract into focused functions called from the main match:
+
+```rust
+fn handle_settings_keys(app: &mut App, key: KeyEvent) -> bool { ... }
+fn handle_filter_input(app: &mut App, key: KeyEvent) -> bool { ... }
+fn handle_tab_keys(app: &mut App, key: KeyEvent) -> bool { ... }
+fn handle_global_keys(app: &mut App, key: KeyEvent) { ... }
+```
+
+Each returns `bool` indicating whether the event was consumed. The main match becomes ~30 lines.
+
+---
+
+### 2. Name TCP flag constants
+
+**Where:** `src/collectors/packets.rs`, `src/app.rs` (feed_network_intel)  
+**Problem:** `flags & 0x02 != 0` appears throughout with no context. Maintainers need external references to understand protocol logic.  
+**Fix:** Define in `packets.rs` and use everywhere:
+
+```rust
+pub const TCP_FLAG_FIN: u8 = 0x01;
+pub const TCP_FLAG_SYN: u8 = 0x02;
+pub const TCP_FLAG_RST: u8 = 0x04;
+pub const TCP_FLAG_ACK: u8 = 0x10;
+pub const TCP_FLAG_URG: u8 = 0x20;
+```
+
+---
+
+### 3. Enumerate settings cursor positions
+
+**Where:** `src/ui/settings.rs`, `src/app.rs`  
+**Problem:** Settings are referenced by magic index throughout (e.g., `app.settings_cursor == 12` means AI Insights). `SETTINGS_COUNT: usize = 15` has no relationship to the actual rows.  
+**Fix:**
+
+```rust
+#[repr(usize)]
+pub enum SettingsField {
+    Theme           = 0,
+    DefaultTab      = 1,
+    RefreshRate     = 2,
+    // ...
+    AiInsights      = 12,
+    AiModel         = 13,
+    AiEndpoint      = 14,
+}
+pub const SETTINGS_COUNT: usize = 15; // must equal variant count
+```
+
+Use `SettingsField::AiInsights as usize` instead of `12` everywhere.
+
+---
+
+### 4. Extract a `render_frame` layout helper
+
+**Where:** Every file in `src/ui/`  
+**Problem:** All 9 tab modules repeat the same 3-chunk vertical layout (header/content/footer). Any layout change requires editing 9 files.  
+**Fix:** Add to `src/ui/widgets.rs`:
+
+```rust
+pub struct FrameChunks {
+    pub header: Rect,
+    pub content: Rect,
+    pub footer: Rect,
+}
+
+pub fn frame_layout(area: Rect) -> FrameChunks {
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(3),
+            Constraint::Min(0),
+            Constraint::Length(3),
+        ])
+        .split(area);
+    FrameChunks { header: chunks[0], content: chunks[1], footer: chunks[2] }
+}
+```
+
+---
+
+### 5. Group `App` fields into semantic substruct
+
+**Where:** `src/app.rs` lines ~89–160  
+**Problem:** `App` has 60+ fields covering state, collectors, UI positions, filters, and feature flags. It's a god object. New contributors can't tell which fields belong together.  
+**Fix (incremental):** Start with UI state:
+
+```rust
+pub struct UiScrollState {
+    pub packet_scroll: usize,
+    pub packet_selected: Option<u64>,
+    pub connections_scroll: usize,
+    pub topology_scroll: usize,
+    pub insights_scroll: usize,
+    // ...
+}
+```
+
+Move into `App` as `pub scroll: UiScrollState`. Repeat for filters, export state, etc.
+
+---
+
+## Medium impact
+
+### 6. Extract protocol parsers in `packets.rs`
+
+**Where:** `src/collectors/packets.rs` (~2900 lines)  
+**Problem:** DNS, DHCP, NTP, QUIC, HTTP, TLS parsers are nested if/else chains in `parse_transport()` and `parse_udp()`. Adding a new protocol requires navigating the entire chain.  
+**Fix:** Define a trait and register parsers in a `Vec`:
+
+```rust
+trait ProtocolParser: Send + Sync {
+    fn matches(&self, src_port: u16, dst_port: u16, data: &[u8]) -> bool;
+    fn parse(&self, data: &[u8]) -> ParsedProtocol;
+}
+```
+
+---
+
+### 7. Document the `analysis_loop` / `DnsCache` state machines
+
+**Where:** `src/collectors/insights.rs`, `src/collectors/packets.rs`  
+**Problem:** `DnsCache` has a `Pending` state with no timeout — if the resolution thread stalls, lookups return `None` forever. `InsightsStatus` transitions aren't documented.  
+**Fix:** Add a timestamp to `Pending` entries and expire after 5 seconds. Add doc comments to both state machines describing transitions.
+
+---
+
+### 8. Deduplicate scroll handling
+
+**Where:** `src/app.rs` lines ~1350–1693  
+**Problem:** Identical scroll delta logic (`saturating_sub(1)`, `+ 3`, `.min(max)`) is repeated across Up/Down keys and mouse scroll for each tab.  
+**Fix:** A helper closure or function:
+
+```rust
+fn clamp_scroll(current: usize, delta: isize, max: usize) -> usize {
+    ((current as isize + delta).max(0) as usize).min(max)
+}
+```
+
+---
+
+### 9. Annotate packet capture constants
+
+**Where:** `src/collectors/packets.rs` lines 8–14  
+**Problem:** `MAX_PACKETS`, `MAX_STREAM_SEGMENTS`, `CAPTURE_SNAPLEN` have no comments explaining why they are set as they are.  
+**Fix:** Add inline comments explaining the rationale and tradeoffs.
+
+---
+
+### 10. Add `NetwatchConfig::validate()`
+
+**Where:** `src/config.rs`  
+**Problem:** `refresh_rate_ms` is clamped in `app.rs` after loading — validation is separated from the type that owns the data. Invalid configs are silently corrected at use-site.  
+**Fix:**
+
+```rust
+impl NetwatchConfig {
+    pub fn validate(&mut self) {
+        self.refresh_rate_ms = self.refresh_rate_ms.clamp(100, 5000);
+        if self.theme.is_empty() { self.theme = "dark".into(); }
+        // etc.
+    }
+}
+```
+
+Call in `load()` and expose for tests.
+
+---
+
+## Lower impact / cleanup
+
+### 11. Tighten Tokio feature flags
+
+**Where:** `Cargo.toml`  
+**Problem:** `tokio = { features = ["full"] }` pulls in every Tokio subsystem. Only a subset is used.  
+**Fix:** Replace with explicit features: `["rt-multi-thread", "sync", "time"]`.
+
+### 12. Remove stale dead code
+
+**Where:** Various  
+**Problem:** `cargo clippy` surfaces `#[allow(dead_code)]` annotations and unused items. These accumulate as features evolve.  
+**Fix:** Audit and either delete unused code or document why it exists.
+
+### 13. Document the tick/render lifecycle at the top of `run()`
+
+**Where:** `src/app.rs`  
+**Problem:** The relationship between tick timing, event handling, and rendering is implicit. New contributors reading the loop can't easily tell what order things happen.  
+**Fix:** A 5-line comment block at the entry of `run()` explaining the design.
+
+---
+
+## Done (archived)
+
+Nothing yet.

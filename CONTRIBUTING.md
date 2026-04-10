@@ -1,58 +1,280 @@
 # Contributing to NetWatch
 
-## Error Handling Conventions
+Thanks for your interest. This guide covers everything you need to make a clean contribution.
+
+---
+
+## Table of Contents
+
+1. [Getting started](#getting-started)
+2. [Architecture overview](#architecture-overview)
+3. [Adding a new tab](#adding-a-new-tab)
+4. [Adding a new collector](#adding-a-new-collector)
+5. [Adding a setting](#adding-a-setting)
+6. [Error handling conventions](#error-handling-conventions)
+7. [Code style](#code-style)
+8. [Testing](#testing)
+9. [Security](#security)
+10. [Opening a PR](#opening-a-pr)
+
+---
+
+## Getting started
+
+```bash
+git clone https://github.com/matthart1983/netwatch
+cd netwatch
+
+# macOS / Linux
+sudo cargo run --release
+
+# Run tests and checks before every PR
+cargo test
+cargo fmt --check
+cargo clippy --all-targets
+```
+
+**Linux only:** install `libpcap-dev` before building.
+
+**Windows:** download the [Npcap SDK](https://npcap.com) and set `LIB` to the SDK's `Lib\x64` directory.
+
+---
+
+## Architecture overview
+
+```
+src/
+├── main.rs                  — Entry point, CLI arg parsing, root error handling
+├── app.rs                   — App struct (all state), event loop, tick logic
+├── config.rs                — NetwatchConfig: TOML load/save, defaults
+├── theme.rs                 — Color palettes
+├── platform.rs              — OS-specific helpers (interface info, etc.)
+├── collectors/
+│   ├── packets.rs           — libpcap capture, packet parsing, stream reassembly
+│   ├── connections.rs       — Active connections via lsof/netstat, timeline
+│   ├── health.rs            — Gateway + DNS RTT probes
+│   ├── traffic.rs           — Per-interface bandwidth accounting
+│   ├── processes.rs         — Per-process bandwidth via packets + connections
+│   ├── network_intel.rs     — Port scan / beaconing / DNS tunnel detection
+│   ├── incident.rs          — Flight recorder (rolling 5-minute capture window)
+│   ├── geoip.rs             — MaxMind DB + online GeoIP lookup
+│   └── insights.rs          — Ollama AI analysis (opt-in)
+└── ui/
+    ├── mod.rs               — Tab dispatch: routes current_tab to the right renderer
+    ├── widgets.rs           — Shared: header, footer, tab bar, format helpers
+    ├── dashboard.rs         — Tab 1
+    ├── connections.rs       — Tab 2
+    ├── interfaces.rs        — Tab 3
+    ├── packets.rs           — Tab 4
+    ├── stats.rs             — Tab 5
+    ├── topology.rs          — Tab 6
+    ├── timeline.rs          — Tab 7
+    ├── processes.rs         — Tab 8
+    ├── insights.rs          — Tab 9 (opt-in)
+    └── settings.rs          — Settings overlay (`,` key)
+```
+
+### Event loop lifecycle
+
+Every iteration of the main loop in `app.rs`:
+
+1. **Tick** (`app.tick()`) — fires on a timer (default 1s). Updates all collectors: refreshes connections, submits snapshots to insights, checks bandwidth.
+2. **Event** — a terminal event (key, mouse, resize) arrives. Key events update `app` state directly. No async — everything is synchronous.
+3. **Render** — `ui::render()` dispatches to the active tab's renderer based on `app.current_tab`.
+
+State shared between threads (collectors running in background threads) is always `Arc<Mutex<T>>` or `Arc<RwLock<T>>`. The main thread only reads these during render and writes to them indirectly through the collector's public API.
+
+---
+
+## Adding a new tab
+
+**Step 1** — Add the variant to `Tab` in `app.rs`:
+
+```rust
+pub enum Tab {
+    // existing...
+    MyNewTab,
+}
+```
+
+**Step 2** — Add it to `BASE_TABS` in `ui/widgets.rs`:
+
+```rust
+const BASE_TABS: &[Tab] = &[
+    // existing...
+    Tab::MyNewTab,
+];
+```
+
+**Step 3** — Add a label entry in `tab_label()` in `ui/widgets.rs`:
+
+```rust
+Tab::MyNewTab => ("9", "MyTab"),
+```
+
+Update the number prefix to be one higher than the last tab, and increment the `all_base_tabs_reachable` test assertion.
+
+**Step 4** — Add scroll state fields to `App` if needed (e.g., `my_new_tab_scroll: usize`).
+
+**Step 5** — Create `src/ui/my_new_tab.rs` with a `pub fn render(f: &mut Frame, app: &App, area: Rect)`. Use any existing tab as a template. The standard layout is:
+
+```rust
+let chunks = Layout::default()
+    .direction(Direction::Vertical)
+    .constraints([
+        Constraint::Length(3), // header
+        Constraint::Min(0),    // content
+        Constraint::Length(3), // footer
+    ])
+    .split(area);
+
+widgets::render_header(f, app, chunks[0]);
+// render content into chunks[1]
+widgets::render_footer(f, app, chunks[2], hints);
+```
+
+**Step 6** — Register the module and dispatch in `ui/mod.rs`:
+
+```rust
+pub mod my_new_tab;
+
+// inside render():
+Tab::MyNewTab => my_new_tab::render(f, &app, area),
+```
+
+**Step 7** — Add the keybinding in `app.rs` (in the global key handler):
+
+```rust
+KeyCode::Char('9') => { app.current_tab = Tab::MyNewTab; }
+```
+
+**Step 8** — Handle scroll keys for the new tab in `app.rs`. Search for `Tab::Insights` scroll handling to see the pattern.
+
+---
+
+## Adding a new collector
+
+Collectors live in `src/collectors/`. A collector is typically a struct that:
+
+- Holds shared state behind `Arc<Mutex<T>>` or `Arc<RwLock<T>>`
+- Spawns a background thread in `new()` or `start()`
+- Exposes a read method (e.g., `get_connections()`) that locks and clones
+
+Minimal template:
+
+```rust
+pub struct MyCollector {
+    data: Arc<Mutex<Vec<MyData>>>,
+}
+
+impl MyCollector {
+    pub fn new() -> Self {
+        let data: Arc<Mutex<Vec<MyData>>> = Arc::new(Mutex::new(Vec::new()));
+        let data_clone = Arc::clone(&data);
+
+        thread::spawn(move || {
+            loop {
+                // collect and update data_clone
+                thread::sleep(Duration::from_secs(5));
+            }
+        });
+
+        Self { data }
+    }
+
+    pub fn get_data(&self) -> Vec<MyData> {
+        self.data.lock().unwrap().clone()
+    }
+}
+```
+
+Add the collector as a field on `App` and call `MyCollector::new()` in `App::new()`.
+
+---
+
+## Adding a setting
+
+Settings are defined in `src/ui/settings.rs`. They are indexed by integer cursor position.
+
+1. Increment `SETTINGS_COUNT`.
+2. Add a `SettingRow` entry to `build_rows()`.
+3. Add the current value to `get_edit_value()`.
+4. Add the mutation to `apply_edit()`.
+5. Add the field to `NetwatchConfig` in `config.rs` with a `Default` value.
+6. Update `full_roundtrip` test in `config.rs`.
+
+The cursor index you use in `apply_edit()` must match the position in `build_rows()` — they are positional, not named. Count from 0.
+
+---
+
+## Error handling conventions
 
 ### Mutex locks
 
-`Mutex::lock().unwrap()` and `RwLock::write().unwrap()` are acceptable throughout the codebase. We do not use `catch_unwind` or poison recovery — a poisoned lock indicates unrecoverable state and panicking is the correct response.
+`Mutex::lock().unwrap()` is acceptable throughout. A poisoned lock means unrecoverable state — panicking is correct here.
 
 ### System calls and external commands
 
-Functions that shell out (`Command::new(...)`) or perform I/O must handle errors gracefully:
-- Return `Vec::new()` or a default value on failure (e.g., `parse_lsof()`, `parse_linux_connections()`)
-- Store error messages in shared state for UI display (e.g., `PacketCollector.error`)
-- Never `unwrap()` on `Command::new(...).output()` — always match or use `?`
+Functions that shell out must handle failures gracefully:
 
-### User-controlled input
+- Return `Vec::new()` or a sensible default on error.
+- Store error messages in shared state for display (e.g., `PacketCollector.error`).
+- Never `unwrap()` on `Command::new(...).output()` — use `match` or `?`.
+- Never use shell expansion or `sh -c` — always `Command::new("binary").args([...])`.
 
-Never `unwrap()` on data derived from user input (filter expressions, addresses). Use `Option`/`Result` and return `None` or a default on parse failure. The display filter parser (`parse_filter`) returns `Option<FilterExpr>` — invalid filters are silently ignored, not panics.
+### User input
 
-### Network data
+Never `unwrap()` on data derived from user input (filter expressions, addresses, hostnames). The filter parser returns `Option<FilterExpr>` — invalid filters are silently ignored.
 
-Packet parsing must validate buffer lengths before indexing. All parsers check minimum sizes (e.g., `data.len() < 14` for Ethernet) and return `None` for malformed packets. Never index into packet data without a bounds check.
+### Packet parsing
+
+Validate buffer lengths before indexing. All parsers check minimum sizes (e.g., `data.len() < 14` for Ethernet) and return `None` for malformed packets. Never index into packet data without a bounds check.
 
 ### Thread spawning
 
-Background threads that run external commands (connections, health probes) use an `AtomicBool` busy guard to prevent unbounded thread accumulation. Always check the guard before spawning.
+Background threads that run external commands use an `AtomicBool` busy guard to prevent unbounded thread accumulation. Always check the guard before spawning a new thread.
 
-## Code Style
+---
 
-- Follow existing patterns in neighbouring code
-- Use `#[cfg(target_os = "...")]` for platform-specific code, not runtime checks
-- eBPF code is gated behind `#[cfg(all(target_os = "linux", feature = "ebpf"))]`
-- Named constants for magic numbers (see `CAPTURE_SNAPLEN`, `CAPTURE_TIMEOUT_MS`, etc.)
-- Prefer `Arc<Mutex<T>>` for shared mutable state between threads
-- Prefer `Arc<AtomicBool>` for simple flags
+## Code style
 
-## Documentation
+- `cargo fmt` — enforced in CI, no exceptions.
+- Named constants for magic numbers. The pattern `0x02` for TCP SYN is confusing — use `TCP_FLAG_SYN`.
+- `#[cfg(target_os = "...")]` for platform-specific code, not runtime checks.
+- eBPF code is gated behind `#[cfg(all(target_os = "linux", feature = "ebpf"))]`.
+- Prefer `Arc<Mutex<T>>` for shared mutable state between threads.
+- Prefer `Arc<AtomicBool>` for simple flags.
+- No `eprintln!` in library code — errors surface through the UI or collector state.
 
-- Keep `README.md`, `WIKI.md`, and `CHANGELOG.md` aligned with the current app behavior
-- When a planning note, audit, or one-off review stops being maintained, remove it instead of leaving stale Markdown in the repo
-- Do not document features as shipped until they are reachable in the current UI or CLI
+---
 
-## Local Verification
+## Testing
 
-Run the standard Rust checks before opening a PR:
+Unit tests live inline (`#[cfg(test)] mod tests`). There are no integration tests yet. Before opening a PR:
 
 ```bash
-cargo fmt --check
-cargo clippy --all-targets
-cargo test
+cargo test                   # all tests
+cargo fmt --check            # formatting
+cargo clippy --all-targets   # lints
 ```
+
+If you add a new tab, add it to the `tab_at_column` tests in `ui/widgets.rs` (update the count assertion and add a reachability test).
+
+If you add a setting, update the `build_rows_count` and `full_roundtrip` tests.
+
+---
 
 ## Security
 
-- Never use shell expansion or `sh -c` — always `Command::new("binary").args([...])`
-- Never log or display secrets, API keys, or credentials
-- Packet capture data may contain sensitive payloads — the pcap export feature writes raw data, which is expected behaviour for a network diagnostic tool
-- eBPF programs require `CAP_BPF` / root — fail gracefully with a status bar warning, never escalate privileges programmatically
+- Never log or display secrets, API keys, or credentials.
+- Packet capture data may contain sensitive payloads — the PCAP export writes raw data by design.
+- eBPF programs require `CAP_BPF` / root — fail gracefully with a status bar warning, never escalate privileges programmatically.
+
+---
+
+## Opening a PR
+
+- Keep PRs focused: one feature or fix per PR.
+- Update `CHANGELOG.md` under `[Unreleased]` with a one-line description.
+- Run `cargo test && cargo fmt --check && cargo clippy --all-targets` before pushing.
+- If your change adds a new tab or setting, include a screenshot or description of the UI in the PR body.
