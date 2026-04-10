@@ -28,8 +28,9 @@ fn render_header(f: &mut Frame, app: &App, area: Rect) {
 }
 
 fn render_status(f: &mut Frame, app: &App, area: Rect) {
-    let status = app.insights_collector.get_status();
-    let model = &app.insights_collector.model;
+    let Some(collector) = app.insights_collector.as_ref() else { return; };
+    let status = collector.get_status();
+    let model = &collector.model;
 
     let (status_text, status_style) = match &status {
         InsightsStatus::Idle => (
@@ -68,7 +69,8 @@ fn render_status(f: &mut Frame, app: &App, area: Rect) {
 }
 
 fn render_insights(f: &mut Frame, app: &App, area: Rect) {
-    let insights = app.insights_collector.get_insights();
+    let Some(collector) = app.insights_collector.as_ref() else { return; };
+    let insights = collector.get_insights();
 
     let block = Block::default()
         .title(format!(" Network Insights ({}) ", insights.len()))
@@ -78,33 +80,57 @@ fn render_insights(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(block, area);
 
     if insights.is_empty() {
-        let status = app.insights_collector.get_status();
+        let status = collector.get_status();
         let msg = match status {
-            InsightsStatus::OllamaUnavailable => vec![
-                Line::from(""),
-                Line::from(Span::styled(
-                    "  Ollama is not running. To enable AI insights:",
-                    Style::default().fg(app.theme.status_warn),
-                )),
-                Line::from(""),
-                Line::from(Span::styled(
-                    "    1. Install Ollama: https://ollama.com",
-                    Style::default().fg(app.theme.text_primary),
-                )),
-                Line::from(Span::styled(
-                    "    2. Pull a model:   ollama pull llama3.2",
-                    Style::default().fg(app.theme.text_primary),
-                )),
-                Line::from(Span::styled(
-                    "    3. Start serving:  ollama serve",
-                    Style::default().fg(app.theme.text_primary),
-                )),
-                Line::from(""),
-                Line::from(Span::styled(
-                    "  NetWatch will auto-detect Ollama and begin analysis.",
-                    Style::default().fg(app.theme.text_muted),
-                )),
-            ],
+            InsightsStatus::OllamaUnavailable => {
+                let endpoint = &app.insights_collector.as_ref().map(|c| c.endpoint.clone()).unwrap_or_default();
+                let is_local = endpoint == "local" || endpoint.is_empty();
+                if is_local {
+                    vec![
+                        Line::from(""),
+                        Line::from(Span::styled(
+                            "  Ollama is not running. To enable AI insights:",
+                            Style::default().fg(app.theme.status_warn),
+                        )),
+                        Line::from(""),
+                        Line::from(Span::styled(
+                            "    1. Install Ollama: https://ollama.com",
+                            Style::default().fg(app.theme.text_primary),
+                        )),
+                        Line::from(Span::styled(
+                            "    2. Pull a model:   ollama pull llama3.2",
+                            Style::default().fg(app.theme.text_primary),
+                        )),
+                        Line::from(Span::styled(
+                            "    3. Start serving:  ollama serve",
+                            Style::default().fg(app.theme.text_primary),
+                        )),
+                        Line::from(""),
+                        Line::from(Span::styled(
+                            "  Or set AI Endpoint in Settings (,) to use Ollama cloud.",
+                            Style::default().fg(app.theme.text_muted),
+                        )),
+                    ]
+                } else {
+                    vec![
+                        Line::from(""),
+                        Line::from(Span::styled(
+                            "  Could not reach the configured AI endpoint:",
+                            Style::default().fg(app.theme.status_warn),
+                        )),
+                        Line::from(""),
+                        Line::from(Span::styled(
+                            format!("    {}", endpoint),
+                            Style::default().fg(app.theme.text_primary),
+                        )),
+                        Line::from(""),
+                        Line::from(Span::styled(
+                            "  Check the AI Endpoint setting in Settings (,).",
+                            Style::default().fg(app.theme.text_muted),
+                        )),
+                    ]
+                }
+            }
             _ => vec![
                 Line::from(""),
                 Line::from(Span::styled(

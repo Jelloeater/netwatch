@@ -6,6 +6,7 @@ use std::thread;
 
 const RTT_HISTORY_MAX: usize = 60;
 
+#[derive(Clone)]
 pub struct HealthStatus {
     pub gateway_rtt_ms: Option<f64>,
     pub gateway_loss_pct: f64,

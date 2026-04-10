@@ -234,6 +234,7 @@ pub struct InsightsCollector {
     pub status: Arc<Mutex<InsightsStatus>>,
     snapshot_tx: std::sync::mpsc::Sender<NetworkSnapshot>,
     pub model: String,
+    pub endpoint: String,
 }
 
 #[derive(Clone, Debug)]
@@ -262,7 +263,7 @@ Rules:
 - Use plain language, avoid jargon where possible"#;
 
 impl InsightsCollector {
-    pub fn new(model: &str) -> Self {
+    pub fn new(model: &str, endpoint: &str) -> Self {
         let (tx, rx) = std::sync::mpsc::channel::<NetworkSnapshot>();
         let insights: Arc<Mutex<Vec<Insight>>> = Arc::new(Mutex::new(Vec::new()));
         let status: Arc<Mutex<InsightsStatus>> = Arc::new(Mutex::new(InsightsStatus::Idle));
@@ -270,9 +271,10 @@ impl InsightsCollector {
         let insights_clone = Arc::clone(&insights);
         let status_clone = Arc::clone(&status);
         let model_clone = model.to_string();
+        let endpoint_clone = endpoint.to_string();
 
         thread::spawn(move || {
-            analysis_loop(rx, insights_clone, status_clone, &model_clone);
+            analysis_loop(rx, insights_clone, status_clone, &model_clone, &endpoint_clone);
         });
 
         Self {
@@ -280,6 +282,7 @@ impl InsightsCollector {
             status,
             snapshot_tx: tx,
             model: model.to_string(),
+            endpoint: endpoint.to_string(),
         }
     }
 
@@ -301,6 +304,7 @@ fn analysis_loop(
     insights: Arc<Mutex<Vec<Insight>>>,
     status: Arc<Mutex<InsightsStatus>>,
     model: &str,
+    endpoint: &str,
 ) {
     let now = Instant::now();
     let mut last_analysis = now.checked_sub(ANALYSIS_INTERVAL).unwrap_or(now);
@@ -337,7 +341,7 @@ fn analysis_loop(
         *status.lock().unwrap() = InsightsStatus::Analyzing;
 
         let prompt = snapshot.to_prompt();
-        match call_ollama(model, &prompt) {
+        match call_ollama(model, endpoint, &prompt) {
             Ok(response) => {
                 let timestamp = chrono::Local::now().format("%H:%M:%S").to_string();
                 let mut ins = insights.lock().unwrap();
@@ -365,7 +369,18 @@ fn analysis_loop(
     }
 }
 
-fn call_ollama(model: &str, prompt: &str) -> Result<String, Box<dyn std::error::Error>> {
+fn call_ollama(
+    model: &str,
+    endpoint: &str,
+    prompt: &str,
+) -> Result<String, Box<dyn std::error::Error>> {
+    let base = if endpoint == "local" || endpoint.is_empty() {
+        "http://localhost:11434"
+    } else {
+        endpoint
+    };
+    let url = format!("{}/api/chat", base);
+
     let body = serde_json::json!({
         "model": model,
         "messages": [
@@ -379,7 +394,7 @@ fn call_ollama(model: &str, prompt: &str) -> Result<String, Box<dyn std::error::
         }
     });
 
-    let resp = ureq::post("http://localhost:11434/api/chat")
+    let resp = ureq::post(&url)
         .timeout(OLLAMA_TIMEOUT)
         .send_string(&body.to_string())?;
 

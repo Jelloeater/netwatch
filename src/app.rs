@@ -83,6 +83,7 @@ pub enum Tab {
     Topology,
     Timeline,
     Processes,
+    Insights,
 }
 
 pub struct App {
@@ -147,6 +148,8 @@ pub struct App {
     pub theme: Theme,
     pub process_bandwidth: ProcessBandwidthCollector,
     pub process_scroll: usize,
+    pub insights_collector: Option<crate::collectors::insights::InsightsCollector>,
+    pub insights_scroll: usize,
     pub show_settings: bool,
     pub settings_cursor: usize,
     pub settings_editing: bool,
@@ -178,6 +181,15 @@ impl App {
         };
 
         let theme = crate::theme::by_name(&user_config.theme);
+
+        let insights_collector = if user_config.insights_enabled {
+            Some(crate::collectors::insights::InsightsCollector::new(
+                &user_config.insights_model,
+                &user_config.insights_endpoint,
+            ))
+        } else {
+            None
+        };
 
         let mut network_intel = NetworkIntelCollector::new();
         network_intel.set_bandwidth_threshold(user_config.alerts.bandwidth_threshold);
@@ -242,6 +254,8 @@ impl App {
             theme,
             process_bandwidth: ProcessBandwidthCollector::new(),
             process_scroll: 0,
+            insights_collector,
+            insights_scroll: 0,
             show_settings: false,
             settings_cursor: 0,
             settings_editing: false,
@@ -509,6 +523,26 @@ impl App {
             let dns = self.config_collector.config.dns_servers.first().cloned();
             self.health_prober.probe(gateway.as_deref(), dns.as_deref());
         }
+
+        // Feed AI insights collector with a fresh network snapshot
+        if let Some(ref collector) = self.insights_collector {
+            let packets = self.packet_collector.get_packets();
+            let conns = self.connection_collector.connections.lock().unwrap().clone();
+            let health = self.health_prober.status.lock().unwrap().clone();
+            let (rx_bps, tx_bps) = self
+                .traffic
+                .interfaces
+                .iter()
+                .fold((0.0f64, 0.0f64), |(rx, tx), i| {
+                    (rx + i.rx_rate, tx + i.tx_rate)
+                });
+            let rx_str = crate::ui::widgets::format_bytes_rate(rx_bps);
+            let tx_str = crate::ui::widgets::format_bytes_rate(tx_bps);
+            let snapshot = crate::collectors::insights::NetworkSnapshot::build(
+                &packets, &conns, &health, &rx_str, &tx_str,
+            );
+            collector.submit_snapshot(snapshot);
+        }
     }
 
     fn sample_rtt_from_streams(&mut self) {
@@ -671,6 +705,7 @@ pub async fn run<B: Backend>(terminal: &mut Terminal<B>) -> Result<()> {
                 Tab::Topology => ui::topology::render(f, &app, area),
                 Tab::Timeline => ui::timeline::render(f, &app, area),
                 Tab::Processes => ui::processes::render(f, &app, area),
+                Tab::Insights => ui::insights::render(f, &app, area),
             }
             if app.show_help {
                 ui::help::render(f, &app, area);
@@ -719,6 +754,26 @@ pub async fn run<B: Backend>(terminal: &mut Terminal<B>) -> Result<()> {
                                         app.timeline_window =
                                             app.user_config.timeline_window_enum();
                                         app.theme = crate::theme::by_name(&app.user_config.theme);
+                                        // Rebuild insights collector if AI settings changed
+                                        if cursor >= 12 && cursor <= 14 {
+                                            app.insights_collector =
+                                                if app.user_config.insights_enabled {
+                                                    Some(
+                                                        crate::collectors::insights::InsightsCollector::new(
+                                                            &app.user_config.insights_model,
+                                                            &app.user_config.insights_endpoint,
+                                                        ),
+                                                    )
+                                                } else {
+                                                    None
+                                                };
+                                            // Switch away from Insights tab if disabled
+                                            if !app.user_config.insights_enabled
+                                                && app.current_tab == Tab::Insights
+                                            {
+                                                app.current_tab = Tab::Dashboard;
+                                            }
+                                        }
                                         app.settings_status = Some("✓ Applied".into());
                                         app.settings_status_tick = 0;
                                     }
@@ -911,6 +966,9 @@ pub async fn run<B: Backend>(terminal: &mut Terminal<B>) -> Result<()> {
                     KeyCode::Char('6') => app.current_tab = Tab::Topology,
                     KeyCode::Char('7') => app.current_tab = Tab::Timeline,
                     KeyCode::Char('8') => app.current_tab = Tab::Processes,
+                    KeyCode::Char('9') if app.user_config.insights_enabled => {
+                        app.current_tab = Tab::Insights;
+                    }
                     // Stream view controls (intercept before other Packets keys)
                     KeyCode::Esc if app.current_tab == Tab::Packets && app.stream_view_open => {
                         app.stream_view_open = false;
@@ -921,6 +979,26 @@ pub async fn run<B: Backend>(terminal: &mut Terminal<B>) -> Result<()> {
                         if app.current_tab == Tab::Packets && app.stream_view_open =>
                     {
                         app.stream_hex_mode = !app.stream_hex_mode;
+                    }
+                    KeyCode::Char('a') if app.current_tab == Tab::Insights => {
+                        // Trigger immediate analysis by submitting a fresh snapshot
+                        if let Some(ref collector) = app.insights_collector {
+                            let packets = app.packet_collector.get_packets();
+                            let conns =
+                                app.connection_collector.connections.lock().unwrap().clone();
+                            let health = app.health_prober.status.lock().unwrap().clone();
+                            let (rx_bps, tx_bps) =
+                                app.traffic.interfaces.iter().fold(
+                                    (0.0f64, 0.0f64),
+                                    |(rx, tx), i| (rx + i.rx_rate, tx + i.tx_rate),
+                                );
+                            let rx_str = crate::ui::widgets::format_bytes_rate(rx_bps);
+                            let tx_str = crate::ui::widgets::format_bytes_rate(tx_bps);
+                            let snapshot = crate::collectors::insights::NetworkSnapshot::build(
+                                &packets, &conns, &health, &rx_str, &tx_str,
+                            );
+                            collector.submit_snapshot(snapshot);
+                        }
                     }
                     KeyCode::Char('a')
                         if app.current_tab == Tab::Packets && app.stream_view_open =>
@@ -1314,6 +1392,9 @@ pub async fn run<B: Backend>(terminal: &mut Terminal<B>) -> Result<()> {
                         Tab::Processes => {
                             app.process_scroll = app.process_scroll.saturating_sub(1);
                         }
+                        Tab::Insights => {
+                            app.insights_scroll = app.insights_scroll.saturating_sub(1);
+                        }
                         _ => {
                             app.selected_interface = match app.selected_interface {
                                 Some(0) | None => None,
@@ -1368,6 +1449,9 @@ pub async fn run<B: Backend>(terminal: &mut Terminal<B>) -> Result<()> {
                                 app.process_scroll += 1;
                             }
                         }
+                        Tab::Insights => {
+                            app.insights_scroll += 1;
+                        }
                         _ => {
                             let max = app.traffic.interfaces.len().saturating_sub(1);
                             app.selected_interface = match app.selected_interface {
@@ -1414,7 +1498,9 @@ fn handle_mouse(app: &mut App, mouse: crossterm::event::MouseEvent) {
         MouseEventKind::Down(MouseButton::Left) => {
             // Header row: click on tabs (row 0 or 1 within header area)
             if row < 3 {
-                if let Some(tab) = ui::widgets::tab_at_column(col) {
+                if let Some(tab) =
+                    ui::widgets::tab_at_column(col, app.user_config.insights_enabled)
+                {
                     app.current_tab = tab;
                     return;
                 }
@@ -1521,6 +1607,9 @@ fn handle_mouse(app: &mut App, mouse: crossterm::event::MouseEvent) {
                 Tab::Processes => {
                     app.process_scroll = app.process_scroll.saturating_sub(3);
                 }
+                Tab::Insights => {
+                    app.insights_scroll = app.insights_scroll.saturating_sub(3);
+                }
                 Tab::Dashboard | Tab::Interfaces => {
                     app.selected_interface = match app.selected_interface {
                         Some(0) | None => None,
@@ -1577,6 +1666,9 @@ fn handle_mouse(app: &mut App, mouse: crossterm::event::MouseEvent) {
                 Tab::Processes => {
                     let max = app.process_bandwidth.ranked().len().saturating_sub(1);
                     app.process_scroll = (app.process_scroll + 3).min(max);
+                }
+                Tab::Insights => {
+                    app.insights_scroll += 3;
                 }
                 Tab::Dashboard | Tab::Interfaces => {
                     let max = app.traffic.interfaces.len().saturating_sub(1);

@@ -39,8 +39,14 @@ pub struct NetwatchConfig {
     /// Network intelligence alert settings
     pub alerts: AlertConfig,
 
-    /// AI insights model name (for Ollama / local LLM)
+    /// Enable the AI Insights tab (opt-in — off by default)
+    pub insights_enabled: bool,
+
+    /// AI insights model name (for Ollama / local LLM or cloud)
     pub insights_model: String,
+
+    /// AI insights endpoint: "local" → http://localhost:11434, or a full base URL
+    pub insights_endpoint: String,
 
     /// Color theme (dark, light, solarized, dracula, nord)
     pub theme: String,
@@ -74,7 +80,9 @@ impl Default for NetwatchConfig {
             geoip_db: String::new(),
             geoip_asn_db: String::new(),
             alerts: AlertConfig::default(),
-            insights_model: "minimax-m2.5:cloud".into(),
+            insights_enabled: false,
+            insights_model: "llama3.2".into(),
+            insights_endpoint: "local".into(),
             theme: "dark".into(),
         }
     }
@@ -136,6 +144,7 @@ impl NetwatchConfig {
             "topology" => Tab::Topology,
             "timeline" => Tab::Timeline,
             "processes" => Tab::Processes,
+            "insights" => Tab::Insights,
             _ => Tab::Dashboard,
         }
     }
@@ -200,7 +209,9 @@ show_geo = false
                 port_scan_threshold: 10,
                 port_scan_window_secs: 60,
             },
+            insights_enabled: true,
             insights_model: "llama3:8b".into(),
+            insights_endpoint: "local".into(),
             theme: "dark".into(),
         };
         let serialized = toml::to_string_pretty(&cfg).unwrap();

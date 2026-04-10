@@ -29,7 +29,7 @@ pub fn format_bytes_total(bytes: u64) -> String {
     }
 }
 
-const ALL_TABS: &[Tab] = &[
+const BASE_TABS: &[Tab] = &[
     Tab::Dashboard,
     Tab::Connections,
     Tab::Interfaces,
@@ -39,6 +39,14 @@ const ALL_TABS: &[Tab] = &[
     Tab::Timeline,
     Tab::Processes,
 ];
+
+fn visible_tabs(insights_enabled: bool) -> Vec<Tab> {
+    let mut tabs = BASE_TABS.to_vec();
+    if insights_enabled {
+        tabs.push(Tab::Insights);
+    }
+    tabs
+}
 
 fn tab_label(tab: Tab) -> (&'static str, &'static str) {
     match tab {
@@ -50,6 +58,7 @@ fn tab_label(tab: Tab) -> (&'static str, &'static str) {
         Tab::Topology => ("6", "Topology"),
         Tab::Timeline => ("7", "Timeline"),
         Tab::Processes => ("8", "Processes"),
+        Tab::Insights => ("9", "Insights"),
     }
 }
 
@@ -62,7 +71,8 @@ pub fn build_header_line(app: &App, extra: Option<Vec<Span<'static>>>) -> Line<'
         Style::default().fg(t.brand).bold(),
     )];
 
-    for (i, &tab) in ALL_TABS.iter().enumerate() {
+    let tabs = visible_tabs(app.user_config.insights_enabled);
+    for (i, &tab) in tabs.iter().enumerate() {
         if i > 0 {
             spans.push(Span::styled(" │ ", Style::default().fg(t.separator)));
         }
@@ -162,11 +172,12 @@ pub fn render_header_with_extra(f: &mut Frame, app: &App, area: Rect, extra: Vec
 }
 
 /// Given a click column within the header row, return which tab was clicked (if any).
-pub fn tab_at_column(col: u16) -> Option<Tab> {
+pub fn tab_at_column(col: u16, insights_enabled: bool) -> Option<Tab> {
     // Reconstruct the column offsets matching build_header_spans layout:
     // "◉ NetWatch " = 11 chars
     let mut x = 11u16;
-    for (i, &tab) in ALL_TABS.iter().enumerate() {
+    let tabs = visible_tabs(insights_enabled);
+    for (i, &tab) in tabs.iter().enumerate() {
         if i > 0 {
             x += 3; // " │ " separator
         }
@@ -184,44 +195,43 @@ pub fn tab_at_column(col: u16) -> Option<Tab> {
 mod tests {
     use super::*;
 
-    fn find_first_col(target: Tab) -> Option<u16> {
-        (0..200).find(|&col| tab_at_column(col) == Some(target))
+    fn find_first_col(target: Tab, insights_enabled: bool) -> Option<u16> {
+        (0..220).find(|&col| tab_at_column(col, insights_enabled) == Some(target))
     }
 
     #[test]
     fn tab_at_column_before_tabs_returns_none() {
-        assert!(tab_at_column(0).is_none());
-        assert!(tab_at_column(5).is_none());
+        assert!(tab_at_column(0, false).is_none());
+        assert!(tab_at_column(5, false).is_none());
     }
 
     #[test]
     fn tab_at_column_hits_dashboard() {
-        let col = find_first_col(Tab::Dashboard).expect("Dashboard must be reachable");
-        assert_eq!(tab_at_column(col), Some(Tab::Dashboard));
-        // One column before should not be Dashboard
+        let col = find_first_col(Tab::Dashboard, false).expect("Dashboard must be reachable");
+        assert_eq!(tab_at_column(col, false), Some(Tab::Dashboard));
         if col > 0 {
-            assert_ne!(tab_at_column(col - 1), Some(Tab::Dashboard));
+            assert_ne!(tab_at_column(col - 1, false), Some(Tab::Dashboard));
         }
     }
 
     #[test]
     fn tab_at_column_hits_each_tab() {
-        for &tab in ALL_TABS {
-            let col = find_first_col(tab);
+        for &tab in BASE_TABS {
+            let col = find_first_col(tab, false);
             assert!(col.is_some(), "{:?} must be reachable by click", tab);
         }
     }
 
     #[test]
     fn tab_at_column_way_past_end_returns_none() {
-        assert!(tab_at_column(200).is_none());
+        assert!(tab_at_column(220, false).is_none());
     }
 
     #[test]
-    fn all_tabs_reachable() {
+    fn all_base_tabs_reachable() {
         let mut found_tabs = std::collections::HashSet::new();
-        for col in 0..200 {
-            if let Some(tab) = tab_at_column(col) {
+        for col in 0..220 {
+            if let Some(tab) = tab_at_column(col, false) {
                 found_tabs.insert(format!("{:?}", tab));
             }
         }
@@ -229,17 +239,22 @@ mod tests {
     }
 
     #[test]
+    fn insights_tab_reachable_when_enabled() {
+        let col = find_first_col(Tab::Insights, true);
+        assert!(col.is_some(), "Insights must be reachable when enabled");
+        assert!(tab_at_column(col.unwrap(), false).is_none());
+    }
+
+    #[test]
     fn tabs_are_in_order() {
-        let positions: Vec<u16> = ALL_TABS
-            .iter()
-            .map(|&t| find_first_col(t).unwrap())
-            .collect();
+        let tabs = visible_tabs(false);
+        let positions: Vec<u16> = tabs.iter().map(|&t| find_first_col(t, false).unwrap()).collect();
         for i in 1..positions.len() {
             assert!(
                 positions[i] > positions[i - 1],
                 "Tab {:?} should come after {:?}",
-                ALL_TABS[i],
-                ALL_TABS[i - 1]
+                tabs[i],
+                tabs[i - 1]
             );
         }
     }

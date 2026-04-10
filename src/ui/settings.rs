@@ -5,7 +5,7 @@ use ratatui::{
     widgets::{Block, Borders, Clear, Paragraph},
 };
 
-pub const SETTINGS_COUNT: usize = 12;
+pub const SETTINGS_COUNT: usize = 15;
 
 struct SettingRow {
     label: &'static str,
@@ -77,6 +77,18 @@ fn build_rows(cfg: &NetwatchConfig) -> Vec<SettingRow> {
         SettingRow {
             label: "Port Scan Threshold",
             value: cfg.alerts.port_scan_threshold.to_string(),
+        },
+        SettingRow {
+            label: "AI Insights",
+            value: if cfg.insights_enabled { "on" } else { "off" }.into(),
+        },
+        SettingRow {
+            label: "AI Model",
+            value: cfg.insights_model.clone(),
+        },
+        SettingRow {
+            label: "AI Endpoint",
+            value: cfg.insights_endpoint.clone(),
         },
     ]
 }
@@ -238,6 +250,9 @@ pub fn get_edit_value(cfg: &NetwatchConfig, cursor: usize) -> String {
         9 => cfg.geoip_asn_db.clone(),
         10 => cfg.alerts.bandwidth_threshold.to_string(),
         11 => cfg.alerts.port_scan_threshold.to_string(),
+        12 => if cfg.insights_enabled { "on" } else { "off" }.into(),
+        13 => cfg.insights_model.clone(),
+        14 => cfg.insights_endpoint.clone(),
         _ => String::new(),
     }
 }
@@ -264,6 +279,7 @@ pub fn apply_edit(cfg: &mut NetwatchConfig, cursor: usize, value: &str) -> Resul
                 "stats",
                 "topology",
                 "timeline",
+                "insights",
             ];
             let v = value.to_lowercase();
             if valid.contains(&v.as_str()) {
@@ -332,6 +348,25 @@ pub fn apply_edit(cfg: &mut NetwatchConfig, cursor: usize, value: &str) -> Resul
         11 => {
             let v: usize = value.parse().map_err(|_| "Must be a number".to_string())?;
             cfg.alerts.port_scan_threshold = v;
+            Ok(())
+        }
+        12 => {
+            match value.to_lowercase().as_str() {
+                "on" | "true" | "yes" | "1" => cfg.insights_enabled = true,
+                "off" | "false" | "no" | "0" => cfg.insights_enabled = false,
+                _ => return Err("Use on/off".into()),
+            }
+            Ok(())
+        }
+        13 => {
+            if value.is_empty() {
+                return Err("Model name cannot be empty".into());
+            }
+            cfg.insights_model = value.to_string();
+            Ok(())
+        }
+        14 => {
+            cfg.insights_endpoint = value.to_string();
             Ok(())
         }
         _ => Err("Unknown setting".into()),
