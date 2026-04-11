@@ -105,6 +105,7 @@ fn build_help_lines() -> Vec<Line<'static>> {
         "Cycle theme (dark/light/solarized/dracula/nord)",
     ));
     lines.push(key_line(",", "Open settings menu (←→ to cycle theme)"));
+    lines.push(key_line("PgUp/PgDn", "Scroll lists by a page"));
     lines.push(Line::raw(""));
 
     // DASHBOARD
@@ -116,6 +117,11 @@ fn build_help_lines() -> Vec<Line<'static>> {
     lines.push(section_header("CONNECTIONS (Tab 2)"));
     lines.push(key_line("↑↓", "Scroll connection list"));
     lines.push(key_line("s", "Cycle sort column"));
+    lines.push(key_line(
+        "/",
+        "Filter connections (process, state, remote address)",
+    ));
+    lines.push(key_line("Esc", "Clear active filter"));
     lines.push(key_line(
         "Enter",
         "Jump to Packets tab with filter for selected connection",

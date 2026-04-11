@@ -24,6 +24,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::Path;
 
 const RTT_SPARKLINE_SAMPLES: usize = 20;
+const PAGE_SCROLL: usize = 10;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TimelineWindow {
@@ -140,6 +141,9 @@ pub struct App {
     pub packet_filter_input: bool,
     pub packet_filter_text: String,
     pub packet_filter_active: Option<String>,
+    pub connection_filter_input: bool,
+    pub connection_filter_text: String,
+    pub connection_filter_active: Option<String>,
     pub export_status: Option<String>,
     export_status_tick: u32,
     pub bpf_filter_input: bool,
@@ -238,6 +242,9 @@ impl App {
             packet_filter_input: false,
             packet_filter_text: String::new(),
             packet_filter_active: None,
+            connection_filter_input: false,
+            connection_filter_text: String::new(),
+            connection_filter_active: None,
             export_status: None,
             export_status_tick: 0,
             bpf_filter_input: false,
@@ -954,6 +961,10 @@ fn handle_key(app: &mut App, key: crossterm::event::KeyEvent) -> bool {
         handle_filter_input(app, key);
         return false;
     }
+    if app.connection_filter_input && app.current_tab == Tab::Connections {
+        handle_connection_filter_input(app, key);
+        return false;
+    }
     if app.bpf_filter_input && app.current_tab == Tab::Packets {
         handle_bpf_input(app, key);
         return false;
@@ -1103,6 +1114,31 @@ fn handle_filter_input(app: &mut App, key: crossterm::event::KeyEvent) {
         }
         KeyCode::Char(c) => {
             app.packet_filter_text.push(c);
+        }
+        _ => {}
+    }
+}
+
+fn handle_connection_filter_input(app: &mut App, key: crossterm::event::KeyEvent) {
+    match key.code {
+        KeyCode::Enter => {
+            app.connection_filter_input = false;
+            if app.connection_filter_text.trim().is_empty() {
+                app.connection_filter_active = None;
+            } else {
+                app.connection_filter_active = Some(app.connection_filter_text.clone());
+            }
+            app.scroll.connection_scroll = 0;
+        }
+        KeyCode::Esc => {
+            app.connection_filter_input = false;
+            app.connection_filter_text = app.connection_filter_active.clone().unwrap_or_default();
+        }
+        KeyCode::Backspace => {
+            app.connection_filter_text.pop();
+        }
+        KeyCode::Char(c) => {
+            app.connection_filter_text.push(c);
         }
         _ => {}
     }
@@ -1386,6 +1422,19 @@ fn handle_main_key(app: &mut App, key: crossterm::event::KeyEvent) -> bool {
             app.traceroute_view_open = false;
             app.traceroute_runner.clear();
         }
+        KeyCode::Char('/') if app.current_tab == Tab::Connections && !app.traceroute_view_open => {
+            app.connection_filter_input = true;
+            app.connection_filter_text = app.connection_filter_active.clone().unwrap_or_default();
+        }
+        KeyCode::Esc
+            if app.current_tab == Tab::Connections
+                && !app.traceroute_view_open
+                && app.connection_filter_active.is_some() =>
+        {
+            app.connection_filter_active = None;
+            app.connection_filter_text.clear();
+            app.scroll.connection_scroll = 0;
+        }
         KeyCode::Char('e')
             if app.current_tab == Tab::Connections || app.current_tab == Tab::Processes =>
         {
@@ -1495,6 +1544,8 @@ fn handle_main_key(app: &mut App, key: crossterm::event::KeyEvent) -> bool {
         }
         KeyCode::Up => scroll_tab(app, -1),
         KeyCode::Down => scroll_tab(app, 1),
+        KeyCode::PageUp => scroll_tab(app, -(PAGE_SCROLL as isize)),
+        KeyCode::PageDown => scroll_tab(app, PAGE_SCROLL as isize),
         KeyCode::Char('/') if app.current_tab == Tab::Packets && !app.stream_view_open => {
             app.packet_filter_input = true;
             app.packet_filter_text = app.packet_filter_active.clone().unwrap_or_default();

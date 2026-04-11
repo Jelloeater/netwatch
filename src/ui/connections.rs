@@ -17,15 +17,52 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
 }
 
 fn render_header(f: &mut Frame, app: &App, area: Rect) {
-    let count = app.connection_collector.connections.lock().unwrap().len();
-    let extra = vec![
-        Span::raw("  "),
-        Span::styled(
-            format!("{count} connections"),
+    let conns = app.connection_collector.connections.lock().unwrap();
+    let total = conns.len();
+    let filter = active_connection_filter(app);
+    let shown = if let Some(f) = filter.as_deref() {
+        conns.iter().filter(|c| matches_filter(c, f)).count()
+    } else {
+        total
+    };
+    drop(conns);
+
+    let mut extra = vec![Span::raw("  ")];
+    if filter.is_some() {
+        extra.push(Span::styled(
+            format!("{shown}/{total} connections"),
+            Style::default().fg(app.theme.status_warn),
+        ));
+        extra.push(Span::raw("  "));
+        extra.push(Span::styled(
+            format!("filter: {}", filter.as_deref().unwrap_or("")),
+            Style::default().fg(app.theme.key_hint),
+        ));
+    } else {
+        extra.push(Span::styled(
+            format!("{total} connections"),
             Style::default().fg(app.theme.status_good),
-        ),
-    ];
+        ));
+    }
     crate::ui::widgets::render_header_with_extra(f, app, area, extra);
+}
+
+fn active_connection_filter(app: &App) -> Option<String> {
+    if let Some(ref f) = app.connection_filter_active {
+        return Some(f.clone());
+    }
+    if app.connection_filter_input && !app.connection_filter_text.is_empty() {
+        return Some(app.connection_filter_text.clone());
+    }
+    None
+}
+
+fn matches_filter(conn: &crate::collectors::connections::Connection, filter: &str) -> bool {
+    let needle = filter.to_lowercase();
+    let process = conn.process_name.as_deref().unwrap_or("").to_lowercase();
+    let state = conn.state.to_lowercase();
+    let remote = conn.remote_addr.to_lowercase();
+    process.contains(&needle) || state.contains(&needle) || remote.contains(&needle)
 }
 
 fn render_connection_table(f: &mut Frame, app: &App, area: Rect) {
@@ -38,6 +75,9 @@ fn render_connection_table(f: &mut Frame, app: &App, area: Rect) {
     };
 
     let mut conns = app.connection_collector.connections.lock().unwrap().clone();
+    if let Some(ref f) = active_connection_filter(app) {
+        conns.retain(|c| matches_filter(c, f));
+    }
     let has_rtt_data = conns.iter().any(|c| c.kernel_rtt_us.is_some());
     let has_sparkline_data = !app.rtt_history.is_empty();
 
@@ -203,6 +243,21 @@ fn render_connection_table(f: &mut Frame, app: &App, area: Rect) {
 }
 
 fn render_footer(f: &mut Frame, app: &App, area: Rect) {
+    if app.connection_filter_input {
+        let filter_line = Line::from(vec![
+            Span::styled(" / ", Style::default().fg(app.theme.brand).bold()),
+            Span::raw(&app.connection_filter_text),
+            Span::styled("█", Style::default().fg(app.theme.text_primary)),
+        ]);
+        let bar = Paragraph::new(filter_line).block(
+            Block::default()
+                .borders(Borders::TOP)
+                .border_style(Style::default().fg(app.theme.key_hint)),
+        );
+        f.render_widget(bar, area);
+        return;
+    }
+
     let hints = if app.traceroute_view_open {
         vec![
             Span::styled("Esc", Style::default().fg(app.theme.key_hint).bold()),
@@ -214,6 +269,8 @@ fn render_footer(f: &mut Frame, app: &App, area: Rect) {
         vec![
             Span::styled("s", Style::default().fg(app.theme.key_hint).bold()),
             Span::raw(":Sort  "),
+            Span::styled("/", Style::default().fg(app.theme.key_hint).bold()),
+            Span::raw(":Filter  "),
             Span::styled("T", Style::default().fg(app.theme.key_hint).bold()),
             Span::raw(":Traceroute  "),
             Span::styled("Enter", Style::default().fg(app.theme.key_hint).bold()),
@@ -430,7 +487,57 @@ fn extract_ip(addr: &str) -> Option<&str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::collectors::connections::Connection;
     use std::collections::VecDeque;
+
+    fn conn(proc: &str, state: &str, remote: &str) -> Connection {
+        Connection {
+            protocol: "TCP".into(),
+            local_addr: "127.0.0.1:1234".into(),
+            remote_addr: remote.into(),
+            state: state.into(),
+            pid: Some(1),
+            process_name: Some(proc.into()),
+            kernel_rtt_us: None,
+        }
+    }
+
+    #[test]
+    fn filter_matches_process_name() {
+        let c = conn("apache2", "ESTABLISHED", "1.2.3.4:443");
+        assert!(matches_filter(&c, "apache"));
+        assert!(matches_filter(&c, "APACHE")); // case insensitive
+    }
+
+    #[test]
+    fn filter_matches_state() {
+        let c = conn("firefox", "CLOSE_WAIT", "1.2.3.4:443");
+        assert!(matches_filter(&c, "close_wait"));
+        assert!(matches_filter(&c, "CLOSE"));
+    }
+
+    #[test]
+    fn filter_matches_remote_address() {
+        let c = conn("firefox", "ESTABLISHED", "192.168.1.50:443");
+        assert!(matches_filter(&c, "192.168"));
+        assert!(matches_filter(&c, ":443"));
+    }
+
+    #[test]
+    fn filter_rejects_non_matching() {
+        let c = conn("firefox", "ESTABLISHED", "10.0.0.1:80");
+        assert!(!matches_filter(&c, "apache"));
+        assert!(!matches_filter(&c, "close_wait"));
+        assert!(!matches_filter(&c, "192.168"));
+    }
+
+    #[test]
+    fn filter_handles_missing_process_name() {
+        let mut c = conn("", "LISTEN", "0.0.0.0:22");
+        c.process_name = None;
+        assert!(!matches_filter(&c, "sshd"));
+        assert!(matches_filter(&c, "listen"));
+    }
 
     #[test]
     fn sparkline_empty() {
