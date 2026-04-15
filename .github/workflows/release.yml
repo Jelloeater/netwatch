@@ -18,6 +18,12 @@ jobs:
           - target: aarch64-unknown-linux-gnu
             os: ubuntu-latest
             name: netwatch-linux-aarch64
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            name: netwatch-linux-x86_64-static
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-latest
+            name: netwatch-linux-aarch64-static
           - target: x86_64-apple-darwin
             os: macos-latest
             name: netwatch-macos-x86_64
@@ -36,11 +42,11 @@ jobs:
           targets: ${{ matrix.target }}
       - uses: Swatinem/rust-cache@v2
 
-      - name: Install libpcap (Linux)
-        if: runner.os == 'Linux' && matrix.target != 'aarch64-unknown-linux-gnu'
+      - name: Install libpcap (Linux x86_64 glibc)
+        if: matrix.target == 'x86_64-unknown-linux-gnu'
         run: sudo apt-get update && sudo apt-get install -y libpcap-dev
 
-      - name: Install cross-compilation dependencies (Linux aarch64)
+      - name: Install cross-compilation dependencies (Linux aarch64 glibc)
         if: matrix.target == 'aarch64-unknown-linux-gnu'
         run: |
           if ! grep -q '^Architectures: amd64$' /etc/apt/sources.list.d/ubuntu.sources; then
@@ -62,6 +68,49 @@ jobs:
           echo "PKG_CONFIG_PATH=/usr/lib/aarch64-linux-gnu/pkgconfig" >> $GITHUB_ENV
           echo "PKG_CONFIG_LIBDIR=/usr/lib/aarch64-linux-gnu/pkgconfig:/usr/share/pkgconfig" >> $GITHUB_ENV
           echo "LIBPCAP_LIBDIR=/usr/lib/aarch64-linux-gnu" >> $GITHUB_ENV
+
+      - name: Install musl toolchain (Linux musl x86_64)
+        if: matrix.target == 'x86_64-unknown-linux-musl'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
+          echo "PCAP_CC=musl-gcc" >> $GITHUB_ENV
+          echo "PCAP_HOST=x86_64-linux-musl" >> $GITHUB_ENV
+
+      - name: Install musl cross toolchain (Linux musl aarch64)
+        if: matrix.target == 'aarch64-unknown-linux-musl'
+        run: |
+          wget -q https://musl.cc/aarch64-linux-musl-cross.tgz
+          sudo tar xzf aarch64-linux-musl-cross.tgz -C /opt
+          echo "/opt/aarch64-linux-musl-cross/bin" >> $GITHUB_PATH
+          echo "PCAP_CC=aarch64-linux-musl-gcc" >> $GITHUB_ENV
+          echo "PCAP_HOST=aarch64-linux-musl" >> $GITHUB_ENV
+          echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=aarch64-linux-musl-gcc" >> $GITHUB_ENV
+
+      - name: Build static libpcap (Linux musl)
+        if: contains(matrix.target, 'linux-musl')
+        run: |
+          LIBPCAP_VERSION=1.10.5
+          PREFIX="${RUNNER_TEMP}/pcap-${{ matrix.target }}"
+          wget -q https://www.tcpdump.org/release/libpcap-${LIBPCAP_VERSION}.tar.gz
+          tar xzf libpcap-${LIBPCAP_VERSION}.tar.gz
+          cd libpcap-${LIBPCAP_VERSION}
+          CC="$PCAP_CC" ./configure \
+            --host="$PCAP_HOST" \
+            --prefix="$PREFIX" \
+            --disable-shared \
+            --disable-dbus \
+            --disable-bluetooth \
+            --disable-rdma \
+            --disable-usb \
+            --without-libnl
+          make -j"$(nproc)"
+          make install
+          echo "LIBPCAP_LIBDIR=${PREFIX}/lib" >> $GITHUB_ENV
+          echo "LIBPCAP_VER=${LIBPCAP_VERSION}" >> $GITHUB_ENV
+          echo "PKG_CONFIG_PATH=${PREFIX}/lib/pkgconfig" >> $GITHUB_ENV
+          echo "PKG_CONFIG_ALL_STATIC=1" >> $GITHUB_ENV
+          echo "PKG_CONFIG_ALLOW_CROSS=1" >> $GITHUB_ENV
 
       - name: Install npcap SDK (Windows)
         if: runner.os == 'Windows'

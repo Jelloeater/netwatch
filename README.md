@@ -39,10 +39,14 @@ cargo install netwatch-tui
 
 | Platform | Download |
 |----------|----------|
-| Linux (x86_64) | [`netwatch-linux-x86_64.tar.gz`](https://github.com/matthart1983/netwatch/releases/latest) |
-| Linux (aarch64) | [`netwatch-linux-aarch64.tar.gz`](https://github.com/matthart1983/netwatch/releases/latest) |
+| Linux (x86_64, Debian/Ubuntu) | [`netwatch-linux-x86_64.tar.gz`](https://github.com/matthart1983/netwatch/releases/latest) |
+| Linux (aarch64, Debian/Ubuntu) | [`netwatch-linux-aarch64.tar.gz`](https://github.com/matthart1983/netwatch/releases/latest) |
+| Linux (x86_64, static — Arch/Fedora/Alpine/any distro) | [`netwatch-linux-x86_64-static.tar.gz`](https://github.com/matthart1983/netwatch/releases/latest) |
+| Linux (aarch64, static — Arch/Fedora/Alpine/any distro) | [`netwatch-linux-aarch64-static.tar.gz`](https://github.com/matthart1983/netwatch/releases/latest) |
 | macOS (Intel) | [`netwatch-macos-x86_64.tar.gz`](https://github.com/matthart1983/netwatch/releases/latest) |
 | macOS (Apple Silicon) | [`netwatch-macos-aarch64.tar.gz`](https://github.com/matthart1983/netwatch/releases/latest) |
+
+The `-static` Linux builds bundle libpcap and have no runtime dependencies — use these on Arch, Fedora, Alpine, or any distro where the default builds report `libpcap.so.0.8: cannot open shared object file`.
 
 **From source:**
 
@@ -90,6 +94,7 @@ Most network tools make you choose: **see what's happening** (iftop, bandwhich) 
 | Rolling incident capture + frozen export bundle | One keypress |
 | Network topology map with traceroute | One keypress |
 | PCAP export for offline analysis | One keypress |
+| AI-analyzed network insights (opt-in, local or cloud LLM) | One setting |
 
 **No config files. No setup. No flags required.**
 
@@ -139,8 +144,13 @@ Protocol hierarchy table with packet counts, byte totals, and distribution bars.
 ### ⏱️ Timeline
 Gantt-style connection timeline — when each connection was active, color-coded by TCP state. Adjustable windows from 1 minute to 1 hour.
 
+### 🤖 AI Insights (opt-in)
+Feed a live snapshot of your network — protocol mix, top talkers, DNS queries, connection states, health probes, expert warnings — to an LLM every 15 seconds and get bullet-point analysis rendered in the TUI. Surfaces anomalies, beaconing patterns, suspicious DNS, and health regressions you might miss scrolling through raw data.
+
+**Off by default.** Enable via Settings (`,`) → AI Insights: on. Supports local [Ollama](https://ollama.com) (default), a remote Ollama host on your network, or Ollama **cloud models** — point the AI Endpoint setting at the cloud URL and skip local setup entirely. No API keys in netwatch. See [INSIGHTS.md](INSIGHTS.md) for full setup.
+
 ### ⚙️ Settings
-Built-in settings overlay for theme, default tab, refresh rate, capture interface, packet-follow mode, GeoIP paths, BPF filter, and alert thresholds. Use `,` to open it and `S` to persist changes.
+Built-in settings overlay for theme, default tab, refresh rate, capture interface, packet-follow mode, GeoIP paths, BPF filter, AI Insights, and alert thresholds. Use `,` to open it and `S` to persist changes.
 
 ---
 
@@ -166,7 +176,7 @@ google                     # Bare word → contains "google"
 
 | Key | Action |
 |-----|--------|
-| `1`–`8` | Switch tabs |
+| `1`–`9` | Switch tabs (tab `9` Insights appears when AI Insights is enabled) |
 | `↑` `↓` | Navigate |
 | `p` | Pause / resume |
 | `r` | Force refresh |
