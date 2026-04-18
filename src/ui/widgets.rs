@@ -55,7 +55,11 @@ pub fn format_bytes_rate(bytes_per_sec: f64) -> String {
 
 /// Right-aligned rate for table cells. Fixed width [`RATE_WIDTH`].
 pub fn format_bytes_rate_padded(bytes_per_sec: f64) -> String {
-    format!("{:>width$}", format_bytes_rate(bytes_per_sec), width = RATE_WIDTH)
+    format!(
+        "{:>width$}",
+        format_bytes_rate(bytes_per_sec),
+        width = RATE_WIDTH
+    )
 }
 
 /// Unpadded byte total for inline use. Zero → "-", integers only.
