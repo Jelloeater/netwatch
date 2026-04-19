@@ -349,6 +349,14 @@ Raw bytes → Ethernet → IPv4/IPv6/ARP → TCP/UDP/ICMP → DNS/TLS/HTTP/DHCP/
 
 **[NetWatch Cloud](https://www.netwatchlabs.com)** — Hosted fleet monitoring for the servers you run NetWatch against. Tiny Rust agent on each Linux host, real-time dashboard, email + Slack alerts on latency, packet loss, or hosts going offline. **Free while we grow.**
 
+NetWatch Cloud is a separate codebase with its own open-source ecosystem (this TUI is intentionally independent — same author, different philosophy):
+
+- [`netwatch-sdk`](https://github.com/matthart1983/netwatch-sdk) — shared Rust wire format + headless collectors ([crates.io](https://crates.io/crates/netwatch-sdk))
+- [`netwatch-agent`](https://github.com/matthart1983/netwatch-agent) — audit-able Rust binary that runs on your hosts and reports to NetWatch Cloud
+- [`netwatch-dashboard`](https://github.com/matthart1983/netwatch-dashboard) — Next.js web UI for the hosted backend
+
+The hosted backend is proprietary; the agent, SDK, and dashboard that talk to it are MIT.
+
 ---
 
 ## Contributing
