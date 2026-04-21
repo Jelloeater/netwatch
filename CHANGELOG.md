@@ -2,6 +2,14 @@
 
 All notable changes to NetWatch will be documented in this file.
 
+## [0.12.5] - 2026-04-21
+
+### Changed
+- **Case-insensitive process-name sort in Connections** — The Connections tab's Process column now sorts case-insensitively, so `Finder`, `facetime`, and `kernel_task` interleave in dictionary order instead of splitting into two alphabetical runs. Case-only differences use byte-wise order as a deterministic tiebreaker. Fixes #16.
+
+### Removed
+- **Misleading `s:Sort` hint on Processes tab** — The hint was never wired up (the Processes tab is always sorted by total bandwidth descending via the bandwidth ranker) and is gone from the footer.
+
 ## [0.12.4] - 2026-04-21
 
 ### Changed

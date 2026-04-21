@@ -107,8 +107,6 @@ fn render_process_table(f: &mut Frame, app: &App, area: Rect) {
 
 fn render_footer(f: &mut Frame, app: &App, area: Rect) {
     let hints = vec![
-        Span::styled("s", Style::default().fg(app.theme.key_hint).bold()),
-        Span::raw(":Sort  "),
         Span::styled("e", Style::default().fg(app.theme.key_hint).bold()),
         Span::raw(":Export  "),
         Span::styled("Enter", Style::default().fg(app.theme.key_hint).bold()),

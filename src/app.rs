@@ -1563,10 +1563,11 @@ fn handle_main_key(app: &mut App, key: crossterm::event::KeyEvent) -> bool {
 pub(crate) fn sort_connections(conns: &mut [Connection], sort_column: usize) {
     match sort_column {
         0 => conns.sort_by(|a, b| {
-            a.process_name
-                .as_deref()
-                .unwrap_or("")
-                .cmp(b.process_name.as_deref().unwrap_or(""))
+            let an = a.process_name.as_deref().unwrap_or("");
+            let bn = b.process_name.as_deref().unwrap_or("");
+            an.to_lowercase()
+                .cmp(&bn.to_lowercase())
+                .then_with(|| an.cmp(bn))
         }),
         1 => conns.sort_by(|a, b| a.pid.cmp(&b.pid)),
         2 => conns.sort_by(|a, b| a.protocol.cmp(&b.protocol)),
@@ -1596,4 +1597,57 @@ fn top_remote_ips(app: &App) -> Vec<(String, usize)> {
     let mut remote_ips: Vec<(String, usize)> = counts.into_iter().collect();
     remote_ips.sort_by(|a, b| b.1.cmp(&a.1));
     remote_ips
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn conn(process: Option<&str>) -> Connection {
+        Connection {
+            protocol: "TCP".into(),
+            local_addr: "127.0.0.1:0".into(),
+            remote_addr: "0.0.0.0:0".into(),
+            state: "ESTABLISHED".into(),
+            pid: None,
+            process_name: process.map(|s| s.to_string()),
+            kernel_rtt_us: None,
+            rx_rate: None,
+            tx_rate: None,
+        }
+    }
+
+    #[test]
+    fn process_name_sort_is_case_insensitive() {
+        // Mixed-case names should interleave in dictionary order regardless of
+        // case — on macOS this is the common case ("Finder", "facetime",
+        // "kernel_task") and byte-wise sort scatters them.
+        let mut conns = vec![
+            conn(Some("finder")),
+            conn(Some("Apple")),
+            conn(Some("zoom")),
+            conn(Some("Brave")),
+        ];
+        sort_connections(&mut conns, 0);
+        let order: Vec<_> = conns
+            .iter()
+            .map(|c| c.process_name.as_deref().unwrap())
+            .collect();
+        assert_eq!(order, vec!["Apple", "Brave", "finder", "zoom"]);
+    }
+
+    #[test]
+    fn process_name_sort_is_stable_on_case_only_difference() {
+        // When two names differ only in case, lowercase wins the tiebreaker
+        // (byte-wise cmp: 'A' < 'a'), but the important property is that the
+        // order is deterministic frame-to-frame.
+        let mut a = vec![conn(Some("finder")), conn(Some("Finder"))];
+        let mut b = vec![conn(Some("Finder")), conn(Some("finder"))];
+        sort_connections(&mut a, 0);
+        sort_connections(&mut b, 0);
+        let names = |v: &[Connection]| -> Vec<String> {
+            v.iter().map(|c| c.process_name.clone().unwrap()).collect()
+        };
+        assert_eq!(names(&a), names(&b));
+    }
 }
