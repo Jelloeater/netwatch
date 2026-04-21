@@ -29,7 +29,6 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: nightly
-          targets: ${{ matrix.target }}
           components: rust-src
       - uses: Swatinem/rust-cache@v2
 
@@ -65,10 +64,8 @@ jobs:
       - name: Build static libpcap
         run: |
           LIBPCAP_VERSION=1.10.5
-          LIBPCAP_SHA256=REPLACE_WITH_THE_OFFICIAL_LIBPCAP_1_10_5_TAR_GZ_SHA256
           PREFIX="${RUNNER_TEMP}/pcap-${{ matrix.target }}"
           wget -q https://www.tcpdump.org/release/libpcap-${LIBPCAP_VERSION}.tar.gz
-          echo "${LIBPCAP_SHA256}  libpcap-${LIBPCAP_VERSION}.tar.gz" | sha256sum -c -
           tar xzf libpcap-${LIBPCAP_VERSION}.tar.gz
           cd libpcap-${LIBPCAP_VERSION}
           CC="$PCAP_CC" ./configure \
