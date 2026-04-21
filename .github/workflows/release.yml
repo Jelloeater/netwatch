@@ -24,6 +24,16 @@ jobs:
           - target: aarch64-unknown-linux-musl
             os: ubuntu-latest
             name: netwatch-linux-aarch64-static
+          - target: mips-unknown-linux-musl
+            os: ubuntu-latest
+            name: netwatch-linux-mips-static
+            toolchain: nightly
+            build_std: "true"
+          - target: mipsel-unknown-linux-musl
+            os: ubuntu-latest
+            name: netwatch-linux-mipsel-static
+            toolchain: nightly
+            build_std: "true"
           - target: x86_64-apple-darwin
             os: macos-latest
             name: netwatch-macos-x86_64
@@ -37,9 +47,11 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: ${{ matrix.toolchain || 'stable' }}
           targets: ${{ matrix.target }}
+          components: ${{ (matrix.toolchain == 'nightly') && 'rust-src' || '' }}
       - uses: Swatinem/rust-cache@v2
 
       - name: Install libpcap (Linux x86_64 glibc)
@@ -77,6 +89,8 @@ jobs:
           case "${{ matrix.target }}" in
             x86_64-unknown-linux-musl)  TRIPLE=x86_64-linux-musl ;;
             aarch64-unknown-linux-musl) TRIPLE=aarch64-linux-musl ;;
+            mips-unknown-linux-musl)    TRIPLE=mips-linux-musl ;;
+            mipsel-unknown-linux-musl)  TRIPLE=mipsel-linux-musl ;;
           esac
           mkdir -p "$HOME/.local/bin"
           cat > "$HOME/.local/bin/${TRIPLE}-gcc" <<EOF
@@ -132,7 +146,11 @@ jobs:
         shell: bash
         run: |
           if [[ "${{ matrix.target }}" == *"linux-musl" ]]; then
-            cargo zigbuild --release --target ${{ matrix.target }}
+            if [[ "${{ matrix.build_std }}" == "true" ]]; then
+              cargo zigbuild -Z build-std=std,panic_abort --release --target ${{ matrix.target }}
+            else
+              cargo zigbuild --release --target ${{ matrix.target }}
+            fi
           else
             cargo build --release --target ${{ matrix.target }}
           fi
