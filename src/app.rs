@@ -1076,6 +1076,23 @@ fn handle_settings_key(app: &mut App, key: crossterm::event::KeyEvent) -> bool {
                 app.settings_status = Some(format!("Theme: {}", names[next]));
                 app.settings_status_tick = 0;
             }
+            KeyCode::Left | KeyCode::Right
+                if app.settings_cursor == ui::settings::cursor::DEFAULT_TAB =>
+            {
+                let names = ui::settings::TAB_NAMES;
+                let current = names
+                    .iter()
+                    .position(|&n| n == app.user_config.default_tab)
+                    .unwrap_or(0);
+                let next = if key.code == KeyCode::Right {
+                    (current + 1) % names.len()
+                } else {
+                    (current + names.len() - 1) % names.len()
+                };
+                app.user_config.default_tab = names[next].to_string();
+                app.settings_status = Some(format!("Default tab: {}", names[next]));
+                app.settings_status_tick = 0;
+            }
             KeyCode::Enter => {
                 app.settings_editing = true;
                 app.settings_edit_buf =

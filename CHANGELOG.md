@@ -2,6 +2,11 @@
 
 All notable changes to NetWatch will be documented in this file.
 
+## [0.12.4] - 2026-04-21
+
+### Changed
+- **Default Tab setting is now a cycler** — The "Default Tab" row in the Settings popup (`,`) now cycles through valid tabs with `←` / `→`, mirroring the Theme row. Previously it was a free-text field that required knowing (or guessing) the tab names, and the error hint listing valid values could get truncated at narrow terminal widths. Fixes #17.
+
 ## [0.12.3] - 2026-04-19
 
 ### Changed

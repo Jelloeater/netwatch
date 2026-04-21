@@ -7,6 +7,17 @@ use ratatui::{
 
 pub const SETTINGS_COUNT: usize = 15;
 
+pub const TAB_NAMES: &[&str] = &[
+    "dashboard",
+    "connections",
+    "interfaces",
+    "packets",
+    "stats",
+    "topology",
+    "timeline",
+    "insights",
+];
+
 /// Named cursor positions for each settings row.
 /// Use these instead of magic integers when navigating or jumping to a setting.
 pub mod cursor {
@@ -169,7 +180,7 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
 
         let value_display = if is_editing {
             format!("{}▏", app.settings_edit_buf)
-        } else if i == 0 && is_selected {
+        } else if is_selected && (i == cursor::THEME || i == cursor::DEFAULT_TAB) {
             format!("◀ {} ▶", row.value)
         } else {
             row.value.clone()
@@ -221,10 +232,10 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
             Span::styled("Esc", Style::default().fg(app.theme.key_hint).bold()),
             Span::raw(":Cancel"),
         ]
-    } else if app.settings_cursor == cursor::THEME {
+    } else if app.settings_cursor == cursor::THEME || app.settings_cursor == cursor::DEFAULT_TAB {
         vec![
             Span::styled("←→", Style::default().fg(app.theme.key_hint).bold()),
-            Span::raw(":Theme  "),
+            Span::raw(":Cycle  "),
             Span::styled("↑↓", Style::default().fg(app.theme.key_hint).bold()),
             Span::raw(":Navigate  "),
             Span::styled("S", Style::default().fg(app.theme.key_hint).bold()),
@@ -291,22 +302,12 @@ pub fn apply_edit(cfg: &mut NetwatchConfig, cursor: usize, value: &str) -> Resul
             }
         }
         1 => {
-            let valid = [
-                "dashboard",
-                "connections",
-                "interfaces",
-                "packets",
-                "stats",
-                "topology",
-                "timeline",
-                "insights",
-            ];
             let v = value.to_lowercase();
-            if valid.contains(&v.as_str()) {
+            if TAB_NAMES.contains(&v.as_str()) {
                 cfg.default_tab = v;
                 Ok(())
             } else {
-                Err(format!("Invalid tab. Use: {}", valid.join(", ")))
+                Err(format!("Invalid tab. Use: {}", TAB_NAMES.join(", ")))
             }
         }
         2 => {
@@ -425,6 +426,18 @@ mod tests {
     fn apply_invalid_tab() {
         let mut cfg = NetwatchConfig::default();
         assert!(apply_edit(&mut cfg, 1, "nonsense").is_err());
+    }
+
+    #[test]
+    fn tab_names_covers_all_tabs() {
+        // Every TAB_NAMES entry must be accepted by apply_edit, and the
+        // default must be in the list.
+        let mut cfg = NetwatchConfig::default();
+        assert!(TAB_NAMES.contains(&cfg.default_tab.as_str()));
+        for name in TAB_NAMES {
+            assert!(apply_edit(&mut cfg, 1, name).is_ok(), "rejected {}", name);
+            assert_eq!(cfg.default_tab, *name);
+        }
     }
 
     #[test]
