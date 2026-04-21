@@ -35,11 +35,15 @@ jobs:
 
       - name: Install zig + cargo-zigbuild
         run: |
-          python3 -m pip install --user ziglang cargo-zigbuild
+          python3 -m pip install --user ziglang==0.13.0 cargo-zigbuild==0.19.7
           echo "$HOME/.local/bin" >> $GITHUB_PATH
           case "${{ matrix.target }}" in
             mips-unknown-linux-musl)   TRIPLE=mips-linux-musl ;;
             mipsel-unknown-linux-musl) TRIPLE=mipsel-linux-musl ;;
+            *)
+              echo "Unsupported matrix.target: ${{ matrix.target }}" >&2
+              exit 1
+              ;;
           esac
           mkdir -p "$HOME/.local/bin"
           cat > "$HOME/.local/bin/${TRIPLE}-gcc" <<EOF
@@ -61,8 +65,10 @@ jobs:
       - name: Build static libpcap
         run: |
           LIBPCAP_VERSION=1.10.5
+          LIBPCAP_SHA256=REPLACE_WITH_THE_OFFICIAL_LIBPCAP_1_10_5_TAR_GZ_SHA256
           PREFIX="${RUNNER_TEMP}/pcap-${{ matrix.target }}"
           wget -q https://www.tcpdump.org/release/libpcap-${LIBPCAP_VERSION}.tar.gz
+          echo "${LIBPCAP_SHA256}  libpcap-${LIBPCAP_VERSION}.tar.gz" | sha256sum -c -
           tar xzf libpcap-${LIBPCAP_VERSION}.tar.gz
           cd libpcap-${LIBPCAP_VERSION}
           CC="$PCAP_CC" ./configure \
