@@ -80,7 +80,7 @@ jobs:
             --without-libnl
           make -j"$(nproc)"
           make install
-          echo "LIBPCAP_LIBDIR=${PREFIX}/lib" >> $GITHUB_ENV
+          echo "LIBPCAP_VER=${LIBPCAP_VERSION}" >> $GITHUB_ENV
           echo "PKG_CONFIG_PATH=${PREFIX}/lib/pkgconfig" >> $GITHUB_ENV
           echo "PKG_CONFIG_ALL_STATIC=1" >> $GITHUB_ENV
           echo "PKG_CONFIG_ALLOW_CROSS=1" >> $GITHUB_ENV
