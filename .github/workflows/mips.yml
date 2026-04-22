@@ -1,0 +1,97 @@
+name: ER4 Static Build (mips64 n32 musl soft-float)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly
+          components: rust-src
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install zig + cargo-zigbuild
+        run: |
+          python3 -m pip install --user ziglang==0.13.0 cargo-zigbuild==0.19.7
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+          TRIPLE=mips64-linux-musl
+
+          mkdir -p "$HOME/.local/bin"
+
+          cat > "$HOME/.local/bin/${TRIPLE}-gcc" <<'EOF'
+          #!/bin/sh
+          exec python3 -m ziglang cc \
+            -target mips64-linux-musl \
+            -mcpu=octeon -mabi=n32 -msoft-float \
+            "$@"
+          EOF
+
+          cat > "$HOME/.local/bin/${TRIPLE}-ar" <<'EOF'
+          #!/bin/sh
+          exec python3 -m ziglang ar "$@"
+          EOF
+
+          cat > "$HOME/.local/bin/${TRIPLE}-ranlib" <<'EOF'
+          #!/bin/sh
+          exec python3 -m ziglang ranlib "$@"
+          EOF
+
+          chmod +x "$HOME/.local/bin/${TRIPLE}"-*
+
+          echo "PCAP_CC=${TRIPLE}-gcc" >> $GITHUB_ENV
+          echo "PCAP_HOST=${TRIPLE}" >> $GITHUB_ENV
+
+      - name: Build static libpcap
+        run: |
+          LIBPCAP_VERSION=1.10.5
+          PREFIX="${RUNNER_TEMP}/pcap-er4"
+          wget -q https://www.tcpdump.org/release/libpcap-${LIBPCAP_VERSION}.tar.gz
+          tar xzf libpcap-${LIBPCAP_VERSION}.tar.gz
+          cd libpcap-${LIBPCAP_VERSION}
+
+          CC="$PCAP_CC" CFLAGS="-mcpu=octeon -mabi=n32 -msoft-float" ./configure \
+            --host="$PCAP_HOST" \
+            --prefix="$PREFIX" \
+            --with-pcap=linux \
+            --disable-shared \
+            --disable-dbus \
+            --disable-bluetooth \
+            --disable-rdma \
+            --disable-usb \
+            --without-libnl
+
+          make -j"$(nproc)"
+          make install
+
+          echo "LIBPCAP_VER=${LIBPCAP_VERSION}" >> $GITHUB_ENV
+          echo "PKG_CONFIG_PATH=${PREFIX}/lib/pkgconfig" >> $GITHUB_ENV
+          echo "PKG_CONFIG_ALL_STATIC=1" >> $GITHUB_ENV
+          echo "PKG_CONFIG_ALLOW_CROSS=1" >> $GITHUB_ENV
+
+      - name: Build (ER4 static)
+        run: |
+          cargo zigbuild -Z build-std=std,panic_abort --release \
+            --target targets/er4-mips64n32-musl-octeon-softfloat.json
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: netwatch-er4-mips64n32-musl-softfloat
+          path: target/*/release/netwatch

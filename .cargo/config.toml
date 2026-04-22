@@ -1,0 +1,8 @@
+[target."targets/er4-mips64n32-musl-octeon-softfloat.json"]
+linker = "mips64-linux-musl-gcc"
+ar = "mips64-linux-musl-ar"
+ranlib = "mips64-linux-musl-ranlib"
+
+[env]
+PKG_CONFIG_ALL_STATIC = "1"
+PKG_CONFIG_ALLOW_CROSS = "1"
