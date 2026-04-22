@@ -89,8 +89,8 @@ jobs:
           case "${{ matrix.target }}" in
             x86_64-unknown-linux-musl)  TRIPLE=x86_64-linux-musl ;;
             aarch64-unknown-linux-musl) TRIPLE=aarch64-linux-musl ;;
-            mips-unknown-linux-musl)    TRIPLE=mips-linux-musl ;;
-            mipsel-unknown-linux-musl)  TRIPLE=mipsel-linux-musl ;;
+            mips-unknown-linux-musl)    TRIPLE=mips-linux-muslsf ;;
+            mipsel-unknown-linux-musl)  TRIPLE=mipsel-linux-muslsf ;;
           esac
           mkdir -p "$HOME/.local/bin"
           cat > "$HOME/.local/bin/${TRIPLE}-gcc" <<EOF
@@ -108,6 +108,9 @@ jobs:
           chmod +x "$HOME/.local/bin/${TRIPLE}"-*
           echo "PCAP_CC=${TRIPLE}-gcc" >> $GITHUB_ENV
           echo "PCAP_HOST=${TRIPLE}" >> $GITHUB_ENV
+          if [[ "${{ matrix.target }}" == mips* ]]; then
+            echo "MIPS_FLOAT_FLAGS=-msoft-float" >> $GITHUB_ENV
+          fi
 
       - name: Build static libpcap (Linux musl)
         if: contains(matrix.target, 'linux-musl')
@@ -117,7 +120,7 @@ jobs:
           wget -q https://www.tcpdump.org/release/libpcap-${LIBPCAP_VERSION}.tar.gz
           tar xzf libpcap-${LIBPCAP_VERSION}.tar.gz
           cd libpcap-${LIBPCAP_VERSION}
-          CC="$PCAP_CC" ./configure \
+          CC="$PCAP_CC" CFLAGS="${MIPS_FLOAT_FLAGS:-}" LDFLAGS="${MIPS_FLOAT_FLAGS:-}" ./configure \
             --host="$PCAP_HOST" \
             --prefix="$PREFIX" \
             --with-pcap=linux \
@@ -146,6 +149,9 @@ jobs:
         shell: bash
         run: |
           if [[ "${{ matrix.target }}" == *"linux-musl" ]]; then
+            if [[ "${{ matrix.target }}" == mips* ]]; then
+              export RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-C link-arg=${MIPS_FLOAT_FLAGS:- -msoft-float}"
+            fi
             if [[ "${{ matrix.build_std }}" == "true" ]]; then
               cargo zigbuild -Z build-std=std,panic_abort --release --target ${{ matrix.target }}
             else
