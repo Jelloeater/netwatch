@@ -69,7 +69,7 @@ jobs:
           wget -q https://www.tcpdump.org/release/libpcap-${LIBPCAP_VERSION}.tar.gz
           tar xzf libpcap-${LIBPCAP_VERSION}.tar.gz
           cd libpcap-${LIBPCAP_VERSION}
-          CC="$PCAP_CC" CFLAGS="$MIPS_FLOAT_FLAGS" LDFLAGS="$MIPS_FLOAT_FLAGS" ./configure \
+          CC="$PCAP_CC" CFLAGS="${MIPS_FLOAT_FLAGS:--msoft-float}" LDFLAGS="${MIPS_FLOAT_FLAGS:--msoft-float}" ./configure \
             --host="$PCAP_HOST" \
             --prefix="$PREFIX" \
             --with-pcap=linux \
@@ -88,7 +88,7 @@ jobs:
 
       - name: Build
         run: |
-          export RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-C link-arg=${MIPS_FLOAT_FLAGS}"
+          export RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-C link-arg=${MIPS_FLOAT_FLAGS:--msoft-float}"
           cargo zigbuild -Z build-std=std,panic_abort --release --target ${{ matrix.target }}
 
       - name: Upload artifact
