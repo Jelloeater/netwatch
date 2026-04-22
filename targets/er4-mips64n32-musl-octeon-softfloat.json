@@ -1,0 +1,1 @@
+{"llvm-target": "mips64-unknown-linux-musl", "data-layout": "e-m:e-i64:64-n32:64-S128", "arch": "mips64", "os": "linux", "env": "musl", "target-endian": "big", "target-pointer-width": "64", "linker-flavor": "ld.lld", "pre-link-args": ["-melf32btsmipn32"], "features": "+soft-float", "cpu": "octeon"}
